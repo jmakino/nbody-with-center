@@ -1,5 +1,5 @@
-#PS_PATH = ../../../src/
-PS_PATH = /usr2/makino/src/fdps-git/FDPS/src/
+PS_PATH = ../../../src/
+
 INC = -I$(PS_PATH)
 
 CC = time g++
@@ -42,19 +42,9 @@ force_gpu_cuda.o:force_gpu_cuda.cu
 OBJS = force_gpu_cuda.o
 endif
 
-EXPORTDIR = /usr2/makino/src/nbody-with-center-export
-EXPORTFILES = Readme.md Makefile   samplein ring.rb  nbody-with-center.cpp   user-defined.hpp
-
-
-nbody-with-center:nbody-with-center.cpp user-defined.hpp  $(OBJS)
-	$(PG_BUILD)
-	$(CC) $(INC) $(CFLAGS) -o $@ nbody-with-center.cpp $(CLIBS)
-
 clean:
 	rm -f *.o *~
 
-export: $(EXPORTFILES)
-	rsync -avuzb $(EXPORTFILES)  $(EXPORTDIR)
 distclean: clean
 	$(PG_CLEAN)
 	rm -f nbody-with-center.out
