@@ -42,6 +42,10 @@ force_gpu_cuda.o:force_gpu_cuda.cu
 OBJS = force_gpu_cuda.o
 endif
 
+nbody-with-center:nbody-with-center.cpp user-defined.hpp  $(OBJS)
+	$(PG_BUILD)
+	$(CC) $(INC) $(CFLAGS) -o $@ nbody-with-center.cpp $(CLIBS)
+
 clean:
 	rm -f *.o *~
 
