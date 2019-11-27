@@ -1,4 +1,4 @@
-PS_PATH = ../../../src/
+PS_PATH =../fdps/fdps/src/
 
 INC = -I$(PS_PATH)
 
