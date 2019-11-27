@@ -242,7 +242,7 @@ void CalcForceEp(const FPGrav * pi,
 		poti += kappa*m_r*dr*dr * 0.5 -dr* pj[j].getCharge()*r_coll_sq_inv;
 		PS::F64vec vij = pi[i].vel - pj[j].vel;
 		PS::F64 rv = rij*vij;
-		PS::F64vec a_eta = eta * m_r * rv * r2_inv * rij;
+		PS::F64vec a_eta = -eta * m_r * rv * r2_inv * rij;
 		// fprintf(stderr, "dr x,y,z, fx, fy, fz = %g %g %g %g %g %g %g %g %g %g\n",
 		// 	dr, pi[i].pos.x,pi[i].pos.y, pi[i].pos.z,
 		// 	a_kappa.x, a_kappa.y, a_kappa.z,
