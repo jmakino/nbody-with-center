@@ -4,7 +4,7 @@ User's Guide for nbody-with-center
 
 # はじめに
 
-この文章では、 nbody-with-center の最低限の使い方について述べる
+この文章では、 nbody-with-center の最低限の使い方について述べる。FDPS を使った惑星リング系計算のサンプルコードである。あんまりテストしてないのでちゃんとあってるかどうか知らない。
 
 # コンパイル方法等
 
@@ -81,7 +81,7 @@ User's Guide for nbody-with-center
 
 # 実行例
 
-  nbody-with-center -i ringin -o out -s 2e-4 -d 2e-3 -D 2e-3 -T 0.5 -e   10 -p 0 -r 0.004 -k 2e4 -M 1
+    nbody-with-center -i ringin -o out -s 2e-4 -d 2e-3 -D 2e-3 -T 0.5 -e   10 -p 0 -r 0.004 -k 2e4 -M 1
 
 出力の最後のほうが
 
