@@ -2,15 +2,15 @@ User's Guide for nbody-with-center
 ----
                        2019/11/26 牧野
 
-= はじめに
+# はじめに
 
 この文章では、 nbody-with-center の最低限の使い方について述べる
 
-= 入手方法
+# 入手方法
 
 2019/12 時点では公開していない。アーカイブを牧野から入手すること。
 
-= コンパイル方法等
+# コンパイル方法等
 
 基本的に FDPS の sample/c++/nbody の下にある nbody.cpp と同じだが、
 
@@ -21,7 +21,7 @@ User's Guide for nbody-with-center
 
 というあたりが違いである。PHANTOM_GRAPE がなくて遅いので、誰か改良して下さいな
 
-= 実行
+# 実行
 
 実行時オプションについて説明する
 
@@ -70,7 +70,7 @@ User's Guide for nbody-with-center
   -h: ヘルプメッセージを出力して終了する。
 
 
-= 初期条件生成
+# 初期条件生成
 
 単に動いているかどうかの確認程度だが
 
