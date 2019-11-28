@@ -143,7 +143,7 @@ void calcEnergy(const Tpsys & system,
     etot = PS::Comm::getSum(etot_loc);
     epot = PS::Comm::getSum(epot_loc);
     ekin = PS::Comm::getSum(ekin_loc);
-    fprintf(stderr, "ekin, epot, etot= %g %g %g\n", ekin, epot, etot);
+    //    fprintf(stderr, "ekin, epot, etot= %g %g %g\n", ekin, epot, etot);
 }
 
 void printHelp() {

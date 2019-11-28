@@ -206,20 +206,20 @@ void CalcForceEp(const FPGrav * pi,
                  const PS::S32 nj,
                  FPGrav * force) {
     PS::F64 eps2 = FPGrav::eps * FPGrav::eps;
-    const auto kappa = FPGrav::kappa;
-    const auto eta   = FPGrav::eta;
-    for(auto i=0; i<ni; i++){
+    PS::F64 kappa = FPGrav::kappa;
+    PS::F64 eta   = FPGrav::eta;
+    for(int i=0; i<ni; i++){
 	const PS::F64vec xi = pi[i].getPos();
 	PS::F64vec ai = 0.0;
 	PS::F64vec ai_dash = 0.0;
 	PS::F64 poti = 0.0;
-	const auto r_coll = FPGrav::rcoll;
+	PS::F64 r_coll = FPGrav::rcoll;
 	PS::F64  r_coll_inv = 1.0/r_coll;
-	const auto r_coll_sq = r_coll*r_coll;
+	PS::F64 r_coll_sq = r_coll*r_coll;
 	PS::F64 r_coll_third_inv = 1.0/(r_coll_sq*r_coll);
 	PS::F64 r_coll_sq_inv = 1.0/(r_coll*r_coll);
 	
-	for(auto j=0; j<nj; j++){
+	for(int j=0; j<nj; j++){
 	    PS::F64vec rij    = xi - pj[j].getPos();
 	     if(pi[i].id == pj[j].id) continue;
 	    PS::F64 r2 = rij * rij + eps2;
@@ -264,18 +264,18 @@ CalcForceEp(const FPGrav * pi,
 	    const Tpj * pj,
 	    const PS::S32 nj,
 	    FPGrav * force){
-    const auto eps2 = FPGrav::eps*FPGrav::eps;
-    const auto kappa = FPGrav::kappa;
-    const auto eta   = FPGrav::eta;
-    for(auto i=0; i<ni; i++){
+    PS::F64 eps2 = FPGrav::eps*FPGrav::eps;
+    PS::F64 kappa = FPGrav::kappa;
+    PS::F64 eta   = FPGrav::eta;
+    for(int i=0; i<ni; i++){
 	const PS::F64vec xi = pi[i].getPos();
 	PS::F64vec ai = 0.0;
 	PS::F64vec ai_dash = 0.0;
 	PS::F64 poti = 0.0;
 	
-	for(auto j=0; j<nj; j++){
-	    const auto r_coll = FPGrav::rcoll;
-	    const auto r_coll_sq = r_coll*r_coll;
+	for(int j=0; j<nj; j++){
+	    PS::F64 r_coll = FPGrav::rcoll;
+	    PS::F64 r_coll_sq = r_coll*r_coll;
 	    PS::F64vec rij    = xi - pj[j].getPos();
 	    if(pi[i].id == pj[j].id) continue;
 	    PS::F64 r2 = rij * rij + eps2;

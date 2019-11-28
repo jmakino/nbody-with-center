@@ -4,7 +4,7 @@ INC = -I$(PS_PATH)
 
 CC = time g++
 #CC = time mpicxx
-CFLAGS = -O3
+CFLAGS = -O3 --std=c++11
 #CFLAGS += -Wall
 #CFLAGS += -ffast-math
 #CFLAGS += -funroll-loops
