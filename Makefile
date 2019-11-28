@@ -51,7 +51,7 @@ clean:
 
 distclean: clean
 	$(PG_CLEAN)
-	rm -f nbody-with-center.out
+	rm -f nbody-with-center
 	rm -rf result
 
 
