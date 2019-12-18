@@ -11,6 +11,9 @@ CFLAGS = -O3 --std=c++11
 CFLAGS += -DPARTICLE_SIMULATOR_THREAD_PARALLEL -fopenmp
 #CFLAGS += -DPARTICLE_SIMULATOR_MPI_PARALLEL
 
+SRCS = LICENSE  Readme.md nbody-with-center.cpp user-defined.hpp\
+      Makefile ringin	 ring.rb	  samplein
+EXPORTDIR = ../nbody-with-center-export
 use_phantom_grape_x86 = no
 #use_gpu_cuda = yes
 
@@ -59,4 +62,9 @@ test:
 	# This command is only for FDPS developers.
 	./test.py
 
+export:
+	rsync -avu $(SRCS) $(EXPORTDIR)
+export-git:
+	make export
+	cd $(EXPORTDIR); git commit -a ; git push
 # fdps-autotest-run (DO NOT CHANGE THIS LINE)

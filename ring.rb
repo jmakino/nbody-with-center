@@ -5,7 +5,7 @@ m=20
 n=1000
 dr=0.1
 mass=5e-8
-vrandscale=0
+vrandscale=0.0
 if ARGV.length >= 4 then
   m=ARGV[0].to_i
   n=ARGV[1].to_i
@@ -16,6 +16,7 @@ if ARGV.length >= 4 then
 end
 STDERR.print "m=#{m} n=#{n} dr=#{dr} mass=#{mass} vrandscale=#{vrandscale}\n"
 def scaled_rand(scale)
+  p scale
   Random::rand(scale)*2 -scale
 end
 def generate_ring(r, n, mass, idoffset, vrandscale)
