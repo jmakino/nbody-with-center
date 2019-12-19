@@ -16,8 +16,7 @@ if ARGV.length >= 4 then
 end
 STDERR.print "m=#{m} n=#{n} dr=#{dr} mass=#{mass} vrandscale=#{vrandscale}\n"
 def scaled_rand(scale)
-  p scale
-  Random::rand(scale)*2 -scale
+  Random::rand(1.0)*scale*2 -scale
 end
 def generate_ring(r, n, mass, idoffset, vrandscale)
   dtheta=Math::PI*2.0/n
