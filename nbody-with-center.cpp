@@ -304,19 +304,22 @@ int main(int argc, char *argv[]) {
     system_grav.initialize();
     PS::S32 n_loc    = 0;
     PS::F32 time_sys = 0.0;
+    fprintf(stderr,"process %d enter initial condition\n",  PS::Comm::getRank());
     if(PS::Comm::getRank() == 0) {
+	fprintf(stderr,"in_name = %s\n",in_name);
 	if (in_name[0]==0){
 	    setParticlesColdUniformSphere(system_grav, n_tot, n_loc);
-	}else{
-	    FileHeader header;
-	    system_grav.readParticleAscii(in_name, header);
-	    n_tot = header.n_body;
-	    n_loc = header.n_body;
 	}
-    } else {
-        system_grav.setNumberOfParticleLocal(n_loc);
     }
-
+    if (in_name[0]){
+	FileHeader header;
+	fprintf(stderr,"reading in_name = %s\n",in_name);
+	system_grav.readParticleAscii(in_name, header);
+	n_loc = system_grav.getNumberOfParticleLocal();
+	n_tot = PS::Comm::getSum(n_loc);
+    }
+    
+    fprintf(stderr,"process%d np=%d nt=%d\n",  PS::Comm::getRank(), n_loc, n_tot);
     const PS::F32 coef_ema = 0.3;
     PS::DomainInfo dinfo;
     dinfo.initialize(coef_ema);

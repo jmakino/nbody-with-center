@@ -50,7 +50,7 @@ nbody-with-center:nbody-with-center.cpp user-defined.hpp  $(OBJS)
 	$(CC) $(INC) $(CFLAGS) -o $@ nbody-with-center.cpp $(CLIBS)
 
 clean:
-	rm -f *.o *~
+	rm -f *.o *~ nbody-with-center
 
 distclean: clean
 	$(PG_CLEAN)
