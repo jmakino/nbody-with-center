@@ -222,23 +222,18 @@ int main(int argc, char *argv[]) {
             break;
         case 'M':
             FPGrav::mass_center	= atof(optarg);
-            std::cerr << "central_mass =" << FPGrav::mass_center<< std::endl;
             break;
         case 'k':
             FPGrav::kappa = atof(optarg);
-            std::cerr << "kappa =" << FPGrav::kappa<< std::endl;
             break;
         case 'p':
             FPGrav::eps  = atof(optarg);
-            std::cerr << "eps =" << FPGrav::eps << std::endl;
             break;
         case 'e':
             FPGrav::eta  = atof(optarg);
-            std::cerr << "eta =" << FPGrav::eta << std::endl;
             break;
         case 'r':
             FPGrav::rcoll  = atof(optarg);
-            std::cerr << "rcoll =" << FPGrav::rcoll << std::endl;
             break;
         case 't':
             theta = atof(optarg);
@@ -246,31 +241,24 @@ int main(int argc, char *argv[]) {
             break;
         case 'T':
             time_end = atof(optarg);
-            std::cerr << "time_end = " << time_end << std::endl;
             break;
         case 's':
             dt = atof(optarg);
-            std::cerr << "time_step = " << dt << std::endl;
             break;
         case 'd':
             dt_diag = atof(optarg);
-            std::cerr << "dt_diag = " << dt_diag << std::endl;
             break;
         case 'D':
             dt_snap = atof(optarg);
-            std::cerr << "dt_snap = " << dt_snap << std::endl;
             break;
         case 'l':
             n_leaf_limit = atoi(optarg);
-            std::cerr << "n_leaf_limit = " << n_leaf_limit << std::endl;
             break;
         case 'n':
             n_group_limit = atoi(optarg);
-            std::cerr << "n_group_limit = " << n_group_limit << std::endl;
             break;
         case 'N':
             n_tot = atoi(optarg);
-            std::cerr << "n_tot = " << n_tot << std::endl;
             break;
         case 'h':
             if(PS::Comm::getRank() == 0) {
@@ -286,7 +274,20 @@ int main(int argc, char *argv[]) {
             PS::Abort();
         }
     }
-
+    if(PS::Comm::getRank() == 0) {
+	std::cerr << "central_mass =" << FPGrav::mass_center<< std::endl;
+	std::cerr << "kappa =" << FPGrav::kappa<< std::endl;
+	std::cerr << "eps =" << FPGrav::eps << std::endl;
+	std::cerr << "eta =" << FPGrav::eta << std::endl;
+	std::cerr << "rcoll =" << FPGrav::rcoll << std::endl;
+	std::cerr << "time_end = " << time_end << std::endl;
+	std::cerr << "time_step = " << dt << std::endl;
+	std::cerr << "dt_diag = " << dt_diag << std::endl;
+	std::cerr << "dt_snap = " << dt_snap << std::endl;
+	std::cerr << "n_leaf_limit = " << n_leaf_limit << std::endl;
+	std::cerr << "n_group_limit = " << n_group_limit << std::endl;
+	std::cerr << "n_tot = " << n_tot << std::endl;
+    }
     makeOutputDirectory(dir_name);
 
     std::ofstream fout_eng;
@@ -324,6 +325,21 @@ int main(int argc, char *argv[]) {
     const PS::F32 coef_ema = 0.3;
     PS::DomainInfo dinfo;
     dinfo.initialize(coef_ema);
+    if (PS::Comm::getNumberOfProc() > 1){
+	int nproc = PS::Comm::getNumberOfProc();
+	int nx = sqrt(nproc+1.0);
+	int ny = nproc/nx;
+	while (nx*ny != nproc){
+	    nx++;
+	    ny = nproc/nx;
+	}
+	if (PS::Comm::getRank()==0){
+	    fprintf(stderr, "np = %d, nx=%d, ny=%d\n", nproc, nx, ny);
+	}
+	dinfo.setDomain(nx, ny);
+    }
+	
+    
     dinfo.decomposeDomainAll(system_grav);
     system_grav.exchangeParticle(dinfo);
     n_loc = system_grav.getNumberOfParticleLocal();
@@ -378,7 +394,8 @@ int main(int argc, char *argv[]) {
                 fprintf(stdout, "time: %10.7f energy error: %+e\n",
                         time_sys, (Etot1 - Etot0) / Etot0);
                 time_diag += dt_diag;
-            }            
+            }
+	    fprintf(stderr,"Wall clock time=%10.5f\n", PS::GetWtime());
         }
         
         
