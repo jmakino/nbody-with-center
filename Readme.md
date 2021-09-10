@@ -119,6 +119,6 @@ User's Guide for nbody-with-center
 
 * FDPS 7.0 に対応して、円筒座標での計算をサポートした。
 * オプションを増やし、デフォルトで反発係数が 0.5 になるようにした。
-
+* 富岳用の Makefile Makefile.a64fx を追加した。
 
 

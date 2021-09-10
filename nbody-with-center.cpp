@@ -4,7 +4,7 @@
 #include<sys/stat.h>
 #include<particle_simulator.hpp>
 
-#include <bits/stdc++.h>
+//#include <bits/stdc++.h>
 constexpr PS::F64 MY_PI = M_PI;
 
 #ifdef ENABLE_PHANTOM_GRAPE_X86
@@ -16,6 +16,73 @@ constexpr PS::F64 MY_PI = M_PI;
 #endif
 #include "user-defined.hpp"
 
+class ElapsedTimes{
+public:
+    PS::F64 t_domain_decomposition;
+    PS::F64 t_exchange_particle;
+    PS::F64 t_treeforce;
+    PS::F64 t_misc;
+    PS::F64 t_total;
+    PS::F64 t_offset;
+    PS::S32 steps;
+    void clear()
+    {
+	t_offset = PS::GetWtime();
+	t_total=0;
+	t_domain_decomposition=0;
+	t_exchange_particle =0;
+	t_treeforce=0;
+	t_misc=0;
+	steps=0;
+    }
+    void measure(int start,
+		 int mode)
+    {
+	static PS::F64 tstart;
+	static PS::S32 mode_called;
+	if (start){
+	    tstart = PS::GetWtime();
+	    mode_called = mode;
+	}else{
+	    auto dt = PS::GetWtime() - tstart;
+	    if (mode != mode_called){
+		fprintf(stdout,
+			"Invalid call to ElapsedTime#meadure:modes= %d  %d\n",
+			mode_called, mode);
+	    }
+	    if (mode == 0){
+		t_domain_decomposition += dt;
+	    }else if (mode == 1){
+		t_exchange_particle += dt;
+	    }else if (mode == 2){
+		t_treeforce+= dt;
+	    }
+	}
+    }
+    void inc_count()
+    {
+	steps++;
+    }
+    void print(FILE* f)
+    {
+	t_total = PS::GetWtime() - t_offset;
+	t_misc = t_total - t_domain_decomposition - t_exchange_particle
+	    - t_treeforce;
+	if (steps==0)return;
+	fprintf(f,"Total time=%e steps=%d, t=%e dd=%e exch=%e force=%e misc=%e\n",
+		t_total, steps, t_total/steps,
+		t_domain_decomposition/steps,
+		t_exchange_particle/steps,
+		t_treeforce/steps,
+		t_misc/steps);
+    }
+};
+
+		
+		    
+	
+    
+    
 
 void makeColdUniformSphere(const PS::F64 mass_glb,
                            const PS::S64 n_glb,
@@ -182,6 +249,7 @@ void printHelp() {
     std::cerr<<"K: ndt for bound (default: 32)"<<std::endl;
     std::cerr<<"S: replulsion coef (default: 0.5)"<<std::endl;
     std::cerr<<"R: number of divisions in radial direction   (default: 1)"<<std::endl;
+    std::cerr<<"b: show time profile"<<std::endl;
     std::cerr<<"h: help"<<std::endl;
 }
 
@@ -215,6 +283,26 @@ void set_coeffs( PS::F64 *kappa,
     *eta = 4*log(2.0)/period;
     *kappa = 4*M_PI*M_PI/(period*period) + (*eta)*(*eta)/4.0;
 }
+
+void printtimeprofile(PS::TimeProfile tp,
+		      FILE* f)
+{
+    fprintf(f, "cs: %e dd: %e ep:%e ml:%e mg:%e cf:%e cml:%e cmg:%e lets: %e %e %e %e\n",
+	    tp.collect_sample_particle,
+	    tp.decompose_domain,
+	    tp.exchange_particle,
+	    tp.make_local_tree,
+	    tp.make_global_tree,
+	    tp.calc_force,
+	    tp.calc_moment_local_tree,
+	    tp.calc_moment_global_tree,
+	    tp.make_LET_1st,
+	    tp.make_LET_2nd,
+	    tp.exchange_LET_1st,
+	    tp.exchange_LET_2nd
+	    );
+}
+    
 
 PS::F64 FPGrav::eps = 0;
 PS::F64 FPGrav::rcoll = 0;
@@ -251,6 +339,7 @@ int main(int argc, char *argv[]) {
     PS::F32 ndtbound = 16;
     PS::F32 repl_coef = 0.5;
     PS::S32 ny_for_dd = 1;
+    PS::S32 show_time_profile = 0;
     char dir_name[1024];
     char in_name[1024];
     PS::S64 n_tot = 1024;
@@ -258,7 +347,7 @@ int main(int argc, char *argv[]) {
     strncpy(dir_name,"./result", 1000);
     in_name[0]=0;
     opterr = 0;
-    while((c=getopt(argc,argv,"i:r:k:e:p:o:d:D:t:T:l:M:n:N:hs:K:S:R:")) != -1){
+    while((c=getopt(argc,argv,"i:r:k:e:p:o:d:D:t:T:l:M:n:N:hs:K:S:R:b")) != -1){
         switch(c){
         case 'i':
 	    strncpy(in_name,optarg,1000);
@@ -316,6 +405,9 @@ int main(int argc, char *argv[]) {
         case 'S':
             repl_coef = atof(optarg);
             break;
+        case 'b':
+            show_time_profile = 1;
+            break;
         case 'h':
             if(PS::Comm::getRank() == 0) {
                 printHelp();
@@ -365,6 +457,7 @@ int main(int argc, char *argv[]) {
 
     PS::ParticleSystem<FPGrav> system_grav;
     system_grav.initialize();
+    system_grav.clearTimeProfile();
     PS::S32 n_loc    = 0;
     PS::F32 time_sys = 0.0;
     //    fprintf(stderr,"process %d enter initial condition\n",  PS::Comm::getRank());
@@ -387,6 +480,7 @@ int main(int argc, char *argv[]) {
     const PS::F32 coef_ema = 0.3;
     PS::DomainInfo dinfo;
     dinfo.initialize(coef_ema);
+    dinfo.clearTimeProfile();
     if (PS::Comm::getNumberOfProc() > 1){
 	int nproc = PS::Comm::getNumberOfProc();
 	int ny = ny_for_dd;
@@ -401,10 +495,11 @@ int main(int argc, char *argv[]) {
 	dinfo.setDomain(nx, ny);
     }
     dinfo.setBoundaryCondition(PS::BOUNDARY_CONDITION_OPEN);
-    std::cerr << "MY_PI = " << MY_PI << "\n";
+    //    std::cerr << "MY_PI = " << MY_PI << "\n";
     dinfo.setPosRootDomainX(-MY_PI, MY_PI);
     
     dtoc(system_grav);
+    PS::F64 time0= PS::GetWtime();
     dinfo.decomposeDomainAll(system_grav);
 
     n_loc = system_grav.getNumberOfParticleLocal();
@@ -433,6 +528,7 @@ int main(int argc, char *argv[]) {
  Tree_t tree_grav;
     
     tree_grav.initialize(n_tot, theta, n_leaf_limit, n_group_limit);
+    tree_grav.clearTimeProfile();
 #ifdef MULTI_WALK
     const PS::S32 n_walk_limit = 200;
     const PS::S32 tag_max = 1;
@@ -457,6 +553,8 @@ int main(int argc, char *argv[]) {
     PS::F64 time_snap = 0.0;
     PS::S64 n_loop = 0;
     PS::S32 id_snap = 0;
+    ElapsedTimes et;
+    et.clear();
     while(time_sys < time_end){
         if( (time_sys >= time_snap) || ( (time_sys + dt) - time_snap ) > (time_snap - time_sys) ){
             char filename[256];
@@ -477,8 +575,15 @@ int main(int argc, char *argv[]) {
                 fprintf(stdout, "time: %10.7f energy error: %+e\n",
                         time_sys, (Etot1 - Etot0) / Etot0);
                 time_diag += dt_diag;
+		PS::TimeProfile tp = tree_grav.getTimeProfile();
+		if (show_time_profile){
+		    printtimeprofile(tp, stdout);
+		    et.print(stdout);
+			//  fprintf(stdout,"Wall clock time=%10.5f\n", PS::GetWtime()-time0);
+		}
+		fflush(stdout);
             }
-	    //	    fprintf(stderr,"Wall clock time=%10.5f\n", PS::GetWtime());
+	    
         }
         
         
@@ -489,10 +594,14 @@ int main(int argc, char *argv[]) {
         dtoc(system_grav);
         
         if(n_loop % 4 == 0){
+	    et.measure(1,0);
             dinfo.decomposeDomainAll(system_grav);
+	    et.measure(0,0);
         }
         
+	et.measure(1,1);
         system_grav.exchangeParticle(dinfo);
+	et.measure(0,1);
 #ifdef MULTI_WALK
         tree_grav.calcForceAllAndWriteBackMultiWalk(DispatchKernelWithSP,
                                                     RetrieveKernel,
@@ -502,11 +611,15 @@ int main(int argc, char *argv[]) {
                                                     n_walk_limit,
                                                     true);
 #else
+	et.measure(1,2);
         tree_grav.calcForceAllAndWriteBack(CalcForceEp<FPGrav>,
                                            CalcForceSp(),
                                            system_grav,
                                            dinfo);
 					   //		   true, PS::MAKE_LIST_FOR_REUSE );
+	et.measure(0,2);
+	et.inc_count();
+	
 #endif
 	add_central_gravity(system_grav);
         kick(system_grav, dt * 0.5);
