@@ -3,6 +3,10 @@
 #include<unistd.h>
 #include<sys/stat.h>
 #include<particle_simulator.hpp>
+
+#include <bits/stdc++.h>
+constexpr PS::F64 MY_PI = M_PI;
+
 #ifdef ENABLE_PHANTOM_GRAPE_X86
 #include <gp5util.h>
 #endif
@@ -11,6 +15,7 @@
 #include"force_gpu_cuda.hpp"
 #endif
 #include "user-defined.hpp"
+
 
 void makeColdUniformSphere(const PS::F64 mass_glb,
                            const PS::S64 n_glb,
@@ -84,8 +89,20 @@ template<class Tpsys>
 void kick(Tpsys & system,
           const PS::F64 dt) {
     PS::S32 n = system.getNumberOfParticleLocal();
+    //    std::cerr << "Kick\n";
     for(PS::S32 i = 0; i < n; i++) {
+	// 	std::cerr << i << " "<< system[i].acc <<
+	//	    " "<< system[i].pot << " " <<system[i].pos_car << "\n" ;
         system[i].vel  += system[i].acc * dt;
+    }
+}
+
+template<class Tpsys>
+void dtoc(Tpsys & system)
+{
+    PS::S32 n = system.getNumberOfParticleLocal();
+    for(PS::S32 i = 0; i < n; i++) {
+        system[i].dtoc();
     }
 }
 
@@ -113,7 +130,7 @@ void drift(Tpsys & system,
            const PS::F64 dt) {
     PS::S32 n = system.getNumberOfParticleLocal();
     for(PS::S32 i = 0; i < n; i++) {
-        system[i].pos  += system[i].vel * dt;
+        system[i].pos_car  += system[i].vel * dt;
     }
 }
 
@@ -149,19 +166,22 @@ void calcEnergy(const Tpsys & system,
 void printHelp() {
     std::cerr<<"i: dir name of input (default:none"<<std::endl;
     std::cerr<<"o: dir name of output (default: ./result)"<<std::endl;
-    std::cerr<<"e: eta (default: 0.0)"<<std::endl;
-    std::cerr<<"p: eps (default: 1/32)"<<std::endl;
+    std::cerr<<"e: eta (default: 0.0, set if K option>0)"<<std::endl;
+    std::cerr<<"p: eps (default: 0)"<<std::endl;
     std::cerr<<"r: rcoll (default: 0.0)"<<std::endl;
-    std::cerr<<"k: kappa (default: 0.0)"<<std::endl;
+    std::cerr<<"k: kappa (default: 0.0, set if K option>0)"<<std::endl;
     std::cerr<<"t: theta (default: 0.5)"<<std::endl;
     std::cerr<<"T: time_end (default: 10.0)"<<std::endl;
-    std::cerr<<"s: time_step (default: 1.0 / 128.0)"<<std::endl;
+    std::cerr<<"s: time_step (default: 1.0 / 512.0)"<<std::endl;
     std::cerr<<"d: dt_diag (default: 1.0 / 8.0)"<<std::endl;
     std::cerr<<"D: dt_snap (default: 1.0)"<<std::endl;
     std::cerr<<"l: n_leaf_limit (default: 8)"<<std::endl;
     std::cerr<<"M: central mass (default: 1)"<<std::endl;
     std::cerr<<"n: n_group_limit (default: 64)"<<std::endl;
     std::cerr<<"N: n_tot (default: 1024)"<<std::endl;
+    std::cerr<<"K: ndt for bound (default: 32)"<<std::endl;
+    std::cerr<<"S: replulsion coef (default: 0.5)"<<std::endl;
+    std::cerr<<"R: number of divisions in radial direction   (default: 1)"<<std::endl;
     std::cerr<<"h: help"<<std::endl;
 }
 
@@ -186,11 +206,35 @@ void makeOutputDirectory(char * dir_name) {
     }
 }
 
-PS::F64 FPGrav::eps = 1.0/32.0;
+
+void set_coeffs( PS::F64 *kappa,
+		 PS::F64 *eta,
+		 PS::F32 repl_coef,
+		 PS::F32 period)
+{
+    *eta = 4*log(2.0)/period;
+    *kappa = 4*M_PI*M_PI/(period*period) + (*eta)*(*eta)/4.0;
+}
+
+PS::F64 FPGrav::eps = 0;
 PS::F64 FPGrav::rcoll = 0;
 PS::F64 FPGrav::kappa = 0;
 PS::F64 FPGrav::eta = 0;
 PS::F64 FPGrav::mass_center = 1.0;
+
+#ifdef QUAD
+using SPJ_t    = MySPJQuadrupole;
+using Moment_t = MyMomentQuadrupole;
+using CalcForceSp = CalcForceSpQuad<FPGrav, SPJ_t, FPGrav>;
+#else
+using SPJ_t    = MySPJMonopole;
+using Moment_t = MyMomentMonopole;
+using CalcForceSp = CalcForceSpMono<FPGrav, SPJ_t, FPGrav>;
+#endif
+    
+using MY_SEARCH_MODE = PS::SEARCH_MODE_LONG_SCATTER;
+//using Tree_t = PS::TreeForForce<MY_SEARCH_MODE, FPGrav, FPGrav, FPGrav, Moment_t, Moment_t, SPJ_t, PS::CALC_DISTANCE_TYPE_NORMAL>;
+using Tree_t = PS::TreeForForce<MY_SEARCH_MODE, FPGrav, FPGrav, FPGrav, Moment_t, Moment_t, SPJ_t, PS::CALC_DISTANCE_TYPE_NEAREST_X>;
 
 int main(int argc, char *argv[]) {
     std::cout<<std::setprecision(15);
@@ -201,9 +245,12 @@ int main(int argc, char *argv[]) {
     PS::S32 n_leaf_limit = 8;
     PS::S32 n_group_limit = 64;
     PS::F32 time_end = 10.0;
-    PS::F32 dt = 1.0 / 128.0;
+    PS::F32 dt = 1.0 / 512.0;
     PS::F32 dt_diag = 1.0 / 8.0;
     PS::F32 dt_snap = 1.0;
+    PS::F32 ndtbound = 16;
+    PS::F32 repl_coef = 0.5;
+    PS::S32 ny_for_dd = 1;
     char dir_name[1024];
     char in_name[1024];
     PS::S64 n_tot = 1024;
@@ -211,7 +258,7 @@ int main(int argc, char *argv[]) {
     strncpy(dir_name,"./result", 1000);
     in_name[0]=0;
     opterr = 0;
-    while((c=getopt(argc,argv,"i:r:k:e:p:o:d:D:t:T:l:M:n:N:hs:")) != -1){
+    while((c=getopt(argc,argv,"i:r:k:e:p:o:d:D:t:T:l:M:n:N:hs:K:S:R:")) != -1){
         switch(c){
         case 'i':
 	    strncpy(in_name,optarg,1000);
@@ -260,6 +307,15 @@ int main(int argc, char *argv[]) {
         case 'N':
             n_tot = atoi(optarg);
             break;
+        case 'K':
+            ndtbound = atof(optarg);
+            break;
+        case 'R':
+            ny_for_dd = atoi(optarg);
+            break;
+        case 'S':
+            repl_coef = atof(optarg);
+            break;
         case 'h':
             if(PS::Comm::getRank() == 0) {
                 printHelp();
@@ -274,11 +330,16 @@ int main(int argc, char *argv[]) {
             PS::Abort();
         }
     }
+    if (ndtbound > 0.0 )set_coeffs( &(FPGrav::kappa), &(FPGrav::eta),
+				    repl_coef, ndtbound * dt);
+    
     if(PS::Comm::getRank() == 0) {
 	std::cerr << "central_mass =" << FPGrav::mass_center<< std::endl;
 	std::cerr << "kappa =" << FPGrav::kappa<< std::endl;
 	std::cerr << "eps =" << FPGrav::eps << std::endl;
 	std::cerr << "eta =" << FPGrav::eta << std::endl;
+	std::cerr << "repl =" << repl_coef << std::endl;
+	std::cerr << "Tcoef =" << ndtbound<< std::endl;
 	std::cerr << "rcoll =" << FPGrav::rcoll << std::endl;
 	std::cerr << "time_end = " << time_end << std::endl;
 	std::cerr << "time_step = " << dt << std::endl;
@@ -287,6 +348,7 @@ int main(int argc, char *argv[]) {
 	std::cerr << "n_leaf_limit = " << n_leaf_limit << std::endl;
 	std::cerr << "n_group_limit = " << n_group_limit << std::endl;
 	std::cerr << "n_tot = " << n_tot << std::endl;
+	std::cerr << "ny_for_dd = " << ny_for_dd << std::endl;
     }
     makeOutputDirectory(dir_name);
 
@@ -327,8 +389,8 @@ int main(int argc, char *argv[]) {
     dinfo.initialize(coef_ema);
     if (PS::Comm::getNumberOfProc() > 1){
 	int nproc = PS::Comm::getNumberOfProc();
-	int nx = sqrt(nproc+1.0);
-	int ny = nproc/nx;
+	int ny = ny_for_dd;
+	int nx = nproc/ny;
 	while (nx*ny != nproc){
 	    nx++;
 	    ny = nproc/nx;
@@ -338,18 +400,38 @@ int main(int argc, char *argv[]) {
 	}
 	dinfo.setDomain(nx, ny);
     }
-	
+    dinfo.setBoundaryCondition(PS::BOUNDARY_CONDITION_OPEN);
+    std::cerr << "MY_PI = " << MY_PI << "\n";
+    dinfo.setPosRootDomainX(-MY_PI, MY_PI);
     
+    dtoc(system_grav);
     dinfo.decomposeDomainAll(system_grav);
+
+    n_loc = system_grav.getNumberOfParticleLocal();
+	for(auto i=0; i<n_loc; i++){
+	    if(!dinfo.getPosRootDomain().contained(system_grav[i].getPos())){
+		std::cerr<<"n_loc= "<<n_loc<<std::endl;
+		std::cerr<<"dinfo.getPosRootDomain()= "<<dinfo.getPosRootDomain()<<std::endl;
+		std::cerr<<"i= "<<i<<" system_grav[i].getPos()= "<<system_grav[i].getPos()<<std::endl;
+		std::cerr<<"i= "<<i<<" system_grav[i].pos_car= "<<system_grav[i].pos_car<<std::endl;
+		std::cerr<<"i= "<<i<<" system_grav[i].pos= "<<system_grav[i].pos<<std::endl;
+	    }
+	    assert(dinfo.getPosRootDomain().contained(system_grav[i].getPos()));
+	}
+    
     system_grav.exchangeParticle(dinfo);
     n_loc = system_grav.getNumberOfParticleLocal();
+
     
 #ifdef ENABLE_PHANTOM_GRAPE_X86
     g5_open();
     g5_set_eps_to_all(FPGrav::eps);
 #endif
     
-    PS::TreeForForceLong<FPGrav, FPGrav, FPGrav>::Monopole tree_grav;
+
+
+ Tree_t tree_grav;
+    
     tree_grav.initialize(n_tot, theta, n_leaf_limit, n_group_limit);
 #ifdef MULTI_WALK
     const PS::S32 n_walk_limit = 200;
@@ -362,9 +444,10 @@ int main(int argc, char *argv[]) {
                                                 n_walk_limit);
 #else
     tree_grav.calcForceAllAndWriteBack(CalcForceEp<FPGrav>,
-                                       CalcGravitySp<PS::SPJMonopole>,
+                                       CalcForceSp(),
                                        system_grav,
                                        dinfo);
+				       //				       true, PS::MAKE_LIST_FOR_REUSE );
 #endif
     add_central_gravity(system_grav);
     //    dump_system(system_grav);
@@ -395,7 +478,7 @@ int main(int argc, char *argv[]) {
                         time_sys, (Etot1 - Etot0) / Etot0);
                 time_diag += dt_diag;
             }
-	    fprintf(stderr,"Wall clock time=%10.5f\n", PS::GetWtime());
+	    //	    fprintf(stderr,"Wall clock time=%10.5f\n", PS::GetWtime());
         }
         
         
@@ -403,6 +486,7 @@ int main(int argc, char *argv[]) {
         
         time_sys += dt;
         drift(system_grav, dt);
+        dtoc(system_grav);
         
         if(n_loop % 4 == 0){
             dinfo.decomposeDomainAll(system_grav);
@@ -419,9 +503,10 @@ int main(int argc, char *argv[]) {
                                                     true);
 #else
         tree_grav.calcForceAllAndWriteBack(CalcForceEp<FPGrav>,
-                                           CalcGravitySp<PS::SPJMonopole>,
+                                           CalcForceSp(),
                                            system_grav,
                                            dinfo);
+					   //		   true, PS::MAKE_LIST_FOR_REUSE );
 #endif
 	add_central_gravity(system_grav);
         kick(system_grav, dt * 0.5);

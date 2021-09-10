@@ -1,16 +1,18 @@
-PS_PATH =../fdps/fdps/src/
+PS_PATH =../fdps/fdps-devel/src/
 
 INC = -I$(PS_PATH)
 
 CC = time g++
 #CC = time mpicxx
-CFLAGS = -O3 --std=c++11
+CFLAGS = -O3 --std=c++11 -g
 #CFLAGS += -Wall
-#CFLAGS += -ffast-math
-#CFLAGS += -funroll-loops
+CFLAGS += -ffast-math
+CFLAGS += -funroll-loops
 CFLAGS += -DPARTICLE_SIMULATOR_THREAD_PARALLEL -fopenmp
 #CFLAGS += -DPARTICLE_SIMULATOR_MPI_PARALLEL
 
+MPICC =  time mpicxx
+MPICFLAGS = $(CFLAGS) -DPARTICLE_SIMULATOR_MPI_PARALLEL
 SRCS = LICENSE  Readme.md nbody-with-center.cpp user-defined.hpp\
       Makefile ringin	 ring.rb	  samplein
 EXPORTDIR = ../nbody-with-center-export
@@ -48,6 +50,15 @@ endif
 nbody-with-center:nbody-with-center.cpp user-defined.hpp  $(OBJS)
 	$(PG_BUILD)
 	$(CC) $(INC) $(CFLAGS) -o $@ nbody-with-center.cpp $(CLIBS)
+nbody-with-center-mpi:nbody-with-center.cpp user-defined.hpp  $(OBJS)
+	$(PG_BUILD)
+	$(MPICC) $(INC) $(MPICFLAGS) -o $@ nbody-with-center.cpp $(CLIBS)
+nbody-with-center-quad-mpi:nbody-with-center.cpp user-defined.hpp  $(OBJS)
+	$(PG_BUILD)
+	$(MPICC) $(INC) $(MPICFLAGS) -DQUAD -o $@ nbody-with-center.cpp $(CLIBS)
+nbody-with-center-quad:nbody-with-center.cpp user-defined.hpp  $(OBJS)
+	$(PG_BUILD)
+	$(CC) $(INC) $(CFLAGS) -DQUAD -o $@ nbody-with-center.cpp $(CLIBS)
 
 clean:
 	rm -f *.o *~ nbody-with-center

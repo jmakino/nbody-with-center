@@ -1,11 +1,13 @@
 #pragma once
+//constexpr PS::F64 MY_PI = M_PI;
+constexpr PS::F64 SMALL = 1e-15;
 class FileHeader{
 public:
     PS::S64 n_body;
     PS::F64 time;
     PS::S32 readAscii(FILE * fp) {
-        fscanf(fp, "%lf\n", &time);
-        fscanf(fp, "%lld\n", &n_body);
+	int i= fscanf(fp, "%lf\n", &time);
+        i+= fscanf(fp, "%lld\n", &n_body);
         return n_body;
     }
     void writeAscii(FILE* fp) const {
@@ -19,6 +21,7 @@ public:
     PS::S64    id;
     PS::F64    mass;
     PS::F64vec pos;
+    PS::F64vec pos_car;
     PS::F64vec vel;
     PS::F64vec acc;
     PS::F64    pot;    
@@ -33,6 +36,32 @@ public:
         return pos;
     }
 
+    PS::F64vec getPosCar() const {
+        return pos_car;
+    }
+
+    void dtoc()
+    {
+	const auto pos_r   = sqrt(pos_car.x*pos_car.x + pos_car.y*pos_car.y);
+	auto pos_phi = atan2(pos_car.y, pos_car.x);
+	if (pos_phi >= M_PI) pos_phi -= SMALL;
+	if (pos_phi <= -M_PI) pos_phi += SMALL;
+	pos =  PS::F64vec(pos_phi, pos_r, pos_car.z);
+    }
+    void ctod()
+    {
+	const auto cth = cos(pos.x);
+	const auto sth = sin(pos.x);
+	const auto r = pos.y;
+	const auto pos_x = r*cth;
+	const auto pos_y = r*sth;
+	pos_car= PS::F64vec(pos_x, pos_y, pos.z);
+    }
+    
+	
+    PS::F64 getRSearch() const {
+        return rcoll;
+    }
     PS::F64 getCharge() const {
         return mass;
     }
@@ -41,6 +70,8 @@ public:
         id = fp.id;
         mass = fp.mass;
         pos  = fp.pos;
+        pos_car  = fp.pos_car;
+        rcoll  = fp.rcoll;
         vel  = fp.vel;
     }
 
@@ -66,28 +97,225 @@ public:
     void writeAscii(FILE* fp) const {
         fprintf(fp, "%lld\t%.10g\t%.10g\t%.10g\t%.10g\t%.10g\t%.10g\t%.10g\n", 
                 this->id, this->mass,
-                this->pos.x, this->pos.y, this->pos.z,
+                this->pos_car.x, this->pos_car.y, this->pos_car.z,
                 this->vel.x, this->vel.y, this->vel.z);
     }
 
     void readAscii(FILE* fp) {
-        fscanf(fp, "%lld\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n", 
+        if (fscanf(fp, "%lld\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n", 
                &this->id, &this->mass,
-               &this->pos.x, &this->pos.y, &this->pos.z,
-               &this->vel.x, &this->vel.y, &this->vel.z);
-        }
+               &this->pos_car.x, &this->pos_car.y, &this->pos_car.z,
+		   &this->vel.x, &this->vel.y, &this->vel.z) != 8){
+	    fprintf(stderr,"ReadAscii failed\n");
+	}
+    }
 
     void readBinary(FILE* fp) {       }
 
     void add_central_gravity()
     {
-	PS::F64 r2=pos*pos;
-	acc -= FPGrav::mass_center* pos/(r2*sqrt(r2));
+	PS::F64 r2=pos_car*pos_car ;
+	acc -= FPGrav::mass_center* pos_car/(r2*sqrt(r2));
 	pot_center = -FPGrav::mass_center/(sqrt(r2));
 	//	fprintf(stderr,"pos = %g %g %g r2= %g pot=%g pot_center= %g\n",
 	//	pos.x, pos.y, pos.z, r2, pot, pot_center);
     }
     
+};
+
+
+class MyMomentMonopole{
+public:
+    PS::F64 mass;
+    PS::F64vec pos;
+    PS::F64vec pos_car;
+    PS::F64ort boundary;
+    MyMomentMonopole() : mass(0.0), pos(PS::F64vec(0.0)), pos_car(PS::F64vec(0.0)), boundary(PS::F64ort(PS::F64vec(-100.0), PS::F64vec(100.0))){}
+    MyMomentMonopole(const PS::F64 m, const PS::F64vec & p, const PS::F64vec & p_car, const PS::F64ort & b) : mass(m), pos(p), pos_car(p_car), boundary(b){}
+    void init(){
+        mass = 0.0;
+        pos = 0.0;
+        pos_car = 0.0;
+        boundary.init();
+    }
+    PS::F64vec getPos() const {
+        return pos;
+    }
+    PS::F64 getCharge() const {
+	return mass;
+    }
+    template<class Tepj>
+    void accumulateAtLeaf(const Tepj & epj){
+	//	std::cerr << "leaf mass, poss= "<<epj.getCharge() << " "<< epj.getPosCar()
+	//		  << " " <<epj.getPos()<<"\n";
+        mass += epj.getCharge();
+        pos += epj.getCharge() * epj.getPos();
+        pos_car += epj.getCharge() * epj.getPosCar();
+        boundary.merge(epj.getPos());
+    }
+    template<class Tepj>
+    void accumulateAtLeaf2(const Tepj & epj){}
+    void set(){
+        pos = pos / mass;
+        pos_car = pos_car / mass;
+	//	std::cerr << "up node mass, poss= "<<mass << " "<< pos_car << " " <<pos<<"\n";
+    }
+    void accumulate(const MyMomentMonopole & mom){
+	//	std::cerr << "node mass, poss= "<<mom.mass << " "<< mom.pos_car
+	//			  << " " <<mom.pos <<"\n";
+        mass += mom.mass;
+        pos += mom.mass * mom.pos;
+        pos_car += mom.mass * mom.pos_car;
+        boundary.merge(mom.boundary);
+    }
+    void accumulate2(const MyMomentMonopole & mom){}
+    // for DEBUG 
+    void dump(std::ostream & fout = std::cout) const {
+        fout<<"mass="<<mass<<std::endl;
+        fout<<"pos="<<pos<<std::endl;
+        fout<<"pos_car="<<pos_car<<std::endl;
+    }
+};
+
+class MySPJMonopole{
+public:
+    PS::F64 mass;
+    PS::F64vec pos_car;
+    PS::F64vec pos;
+    PS::F64ort boundary;
+    template<class Tmom>
+    void copyFromMoment(const Tmom & mom){
+        this->mass     = mom.mass;
+        this->pos      = mom.pos;
+        this->pos_car        = mom.pos_car;
+        this->boundary = mom.boundary;
+    }
+    void clear(){
+        mass = 0.0;
+        pos = 0.0;
+        pos_car = 0.0;
+        boundary.init();
+    }
+    PS::F64 getCharge() const {
+        return mass;
+    }
+    PS::F64vec getPos() const {
+        return pos;
+    }
+    PS::F64vec getPosCar() const {
+        return pos_car;
+    }
+    MyMomentMonopole convertToMoment() const {
+        return MyMomentMonopole(mass, pos, pos_car, boundary);
+    }
+};
+
+class MyMomentQuadrupole{
+public:
+    PS::F64vec pos;
+    PS::F64 mass;
+    PS::F64mat quad;
+    PS::F64vec pos_car;
+    void init(){
+        pos = 0.0;
+        mass = 0.0;
+        quad = 0.0;
+        pos_car = 0.0;
+    }
+    MyMomentQuadrupole(){
+        mass = 0.0;
+        pos = 0.0;
+        quad = 0.0;
+        pos_car = 0.0;
+    }
+    MyMomentQuadrupole(const PS::F64 m, const PS::F64vec & p, const PS::F64mat & q, const PS::F64vec & p_car){
+        mass = m;
+        pos = p;
+        quad = q;
+        pos_car = p_car;
+    }
+    PS::F64vec getPos() const {
+        return pos;
+    }
+    template<class Tepj>
+    void accumulateAtLeaf(const Tepj & epj){
+        mass += epj.getCharge();
+        pos  += epj.getCharge() * epj.getPos();
+        pos_car += epj.getCharge() * epj.getPosCar();
+    }
+    template<class Tepj>
+    void accumulateAtLeaf2(const Tepj & epj){
+        PS::F64 ctmp = epj.getCharge();
+        PS::F64vec ptmp = epj.getPosCar() - this->pos_car;
+        PS::F64 cx = ctmp * ptmp.x;
+        PS::F64 cy = ctmp * ptmp.y;
+        PS::F64 cz = ctmp * ptmp.z;
+        this->quad.xx += cx * ptmp.x;
+        this->quad.yy += cy * ptmp.y;
+        this->quad.zz += cz * ptmp.z;
+        this->quad.xy += cx * ptmp.y;
+        this->quad.xz += cx * ptmp.z;
+        this->quad.yz += cy * ptmp.z;
+    }
+    void set(){
+        pos = pos / mass;
+        pos_car = pos_car / mass;
+    }
+    void accumulate(const MyMomentQuadrupole & mom){
+        mass += mom.mass;
+        pos += mom.mass * mom.pos;
+        pos_car += mom.mass * mom.pos_car;
+    }
+    void accumulate2(const MyMomentQuadrupole & mom){
+        PS::F64 mtmp = mom.mass;
+        PS::F64vec ptmp = mom.pos_car - this->pos_car;
+        PS::F64 cx = mtmp * ptmp.x;
+        PS::F64 cy = mtmp * ptmp.y;
+        PS::F64 cz = mtmp * ptmp.z;
+        this->quad.xx += cx * ptmp.x + mom.quad.xx;
+        this->quad.yy += cy * ptmp.y + mom.quad.yy;
+        this->quad.zz += cz * ptmp.z + mom.quad.zz;
+        this->quad.xy += cx * ptmp.y + mom.quad.xy;
+        this->quad.xz += cx * ptmp.z + mom.quad.xz;
+        this->quad.yz += cy * ptmp.z + mom.quad.yz;
+    }
+    void dump(std::ostream & fout = std::cout) const {
+        fout<<"mass= "<<mass<<std::endl;
+        fout<<"pos= "<<pos<<std::endl;
+        fout<<"quad= "<<quad<<std::endl;
+    }
+};
+
+class MySPJQuadrupole{
+public:
+    PS::F64 mass;
+    PS::F64vec pos;
+    PS::F64vec pos_car;
+    PS::F64mat quad;
+    PS::F64 getCharge() const {
+        return mass;
+    }
+    PS::F64vec getPos() const {
+        return pos;
+    }
+    PS::F64vec getPosCar() const {
+        return pos_car;
+    }
+    void copyFromMoment(const MyMomentQuadrupole & mom){
+        mass = mom.mass;
+        pos = mom.pos;
+        quad = mom.quad;
+        pos_car = mom.pos_car;
+    }
+    MyMomentQuadrupole convertToMoment() const {
+        return MyMomentQuadrupole(mass, pos, quad, pos_car);
+    }
+    void clear(){
+        mass = 0.0;
+        pos = 0.0;
+        quad = 0.0;
+        pos_car = 0.0;
+    }
 };
 
 
@@ -205,11 +433,26 @@ void CalcForceEp(const FPGrav * pi,
                  const TParticleJ * pj,
                  const PS::S32 nj,
                  FPGrav * force) {
+#if 0
+    std::cerr << "calcforceep  called with "<<ni << " "<< nj << " ips:\n";
+    for(int i=0; i<ni; i++){
+    	std::cerr << i << " "<< pi[i].pos_car<<
+	    " "<< force[i].acc<< " " <<
+	    force[i].pot<<"\n";
+    }
+    std::cerr << "jps:\n";
+    
+    for(int j=0; j<nj; j++){
+    	std::cerr << j << " " << pj[j].mass << " " <<  pj[j].pos_car<< " "
+		  <<  pj[j].pos<<
+    	    "\n";
+    }
+#endif    
     PS::F64 eps2 = FPGrav::eps * FPGrav::eps;
     PS::F64 kappa = FPGrav::kappa;
     PS::F64 eta   = FPGrav::eta;
     for(int i=0; i<ni; i++){
-	const PS::F64vec xi = pi[i].getPos();
+	const PS::F64vec xi = pi[i].pos_car;
 	PS::F64vec ai = 0.0;
 	PS::F64vec ai_dash = 0.0;
 	PS::F64 poti = 0.0;
@@ -220,7 +463,7 @@ void CalcForceEp(const FPGrav * pi,
 	PS::F64 r_coll_sq_inv = 1.0/(r_coll*r_coll);
 	
 	for(int j=0; j<nj; j++){
-	    PS::F64vec rij    = xi - pj[j].getPos();
+	    PS::F64vec rij    = xi - pj[j].pos_car;
 	     if(pi[i].id == pj[j].id) continue;
 	    PS::F64 r2 = rij * rij + eps2;
 	    PS::F64 r2_inv  = 1.0/r2;
@@ -229,6 +472,7 @@ void CalcForceEp(const FPGrav * pi,
 	    if(r_coll_sq < r2){
 		ai     -= pot * r2_inv * rij;
 		poti   -=  pot;
+		//std::cerr << i<< " " << j << " " << pot << " " << poti << "\n";
 	    }else{
 		ai     -=  rij* pj[j].getCharge()*r_coll_third_inv;;
 		poti   -=  pj[j].getCharge()*r_coll_inv;;
@@ -255,54 +499,16 @@ void CalcForceEp(const FPGrav * pi,
 	force[i].acc += ai;
 	force[i].pot += poti;
     }
-}
-
-#if 0
-template<class Tpj>
-CalcForceEp(const FPGrav * pi,
-	    const PS::S32 ni,
-	    const Tpj * pj,
-	    const PS::S32 nj,
-	    FPGrav * force){
-    PS::F64 eps2 = FPGrav::eps*FPGrav::eps;
-    PS::F64 kappa = FPGrav::kappa;
-    PS::F64 eta   = FPGrav::eta;
+#if 0    
+    std::cerr << "calcforcesomono  results "<<ni << " "<< nj << " ips:\n";
     for(int i=0; i<ni; i++){
-	const PS::F64vec xi = pi[i].getPos();
-	PS::F64vec ai = 0.0;
-	PS::F64vec ai_dash = 0.0;
-	PS::F64 poti = 0.0;
-	
-	for(int j=0; j<nj; j++){
-	    PS::F64 r_coll = FPGrav::rcoll;
-	    PS::F64 r_coll_sq = r_coll*r_coll;
-	    PS::F64vec rij    = xi - pj[j].getPos();
-	    if(pi[i].id == pj[j].id) continue;
-	    PS::F64 r2 = rij * rij + eps2;
-	    PS::F64 r_inv  = 1.0/sqrt(r2);
-	    PS::F64 r2_inv  = r_inv * r_inv;
-	    PS::F64 pot = r_inv * pj[j].getCharge();
-	    ai     -= pot * r2_inv * rij;
-	    poti   -= 0.5 * pot;
-	    if(r_coll_sq > r2){
-		PS::F64 m_r = pj[j].mass / (pi[i].mass+pj[j].mass);
-		PS::F64 r = sqrt(r2);
-		PS::F64 dr = r_coll-r ;
-		ai += kappa * m_r * dr/r * rij;
-		poti += 0.5*kappa*m_r*dr*dr * 0.5;
-		PS::F64vec vij = pi[i].vel - pj[j].vel;
-		PS::F64 rv = rij*vij;
-		PS::F64vec a_eta = eta * m_r * rv * r2_inv * rij;
-		ai_dash += a_eta;
-		ai += a_eta;
-	    }
-	}
-	force[i].acc += ai;
-	force[i].pot += poti;
+	std::cerr << i << " "<< force[i].acc<< " " <<
+	    force[i].pot<<"\n";
     }
+#endif    
+    
 }
 
-#endif
 
 template <class TParticleJ>
 void CalcGravitySp(const FPGrav * ep_i,
@@ -310,13 +516,14 @@ void CalcGravitySp(const FPGrav * ep_i,
                  const TParticleJ * ep_j,
                  const PS::S32 n_jp,
                  FPGrav * force) {
+    //    std::cerr << "calcgravitysp  called with "<<n_ip << " "<< n_jp << "\n";
     PS::F64 eps2 = FPGrav::eps * FPGrav::eps;
     for(PS::S32 i = 0; i < n_ip; i++){
-        PS::F64vec xi = ep_i[i].getPos();
+        PS::F64vec xi = ep_i[i].pos;
         PS::F64vec ai = 0.0;
         PS::F64 poti = 0.0;
         for(PS::S32 j = 0; j < n_jp; j++){
-	    PS::F64vec rij    = xi - ep_j[j].getPos();
+	    PS::F64vec rij    = xi - ep_j[j].pos;
 	    PS::F64    r3_inv = rij * rij + eps2;
 	    PS::F64    r_inv  = 1.0/sqrt(r3_inv);
 	    r3_inv  = r_inv * r_inv;
@@ -331,3 +538,108 @@ void CalcGravitySp(const FPGrav * ep_i,
 }
 
 #endif
+
+template<typename Tpi, typename Tpj, typename Tforce>
+struct CalcForceSpMono{
+    void operator ()(const Tpi * pi,
+                     const PS::S32 ni,
+                     const Tpj * pj,
+                     const PS::S32 nj,
+                     Tforce * force){
+	//std::cerr << "calcuforcespmono called with "<<ni << " "<< nj << "\n";
+        const auto eps2 = FPGrav::eps*FPGrav::eps;
+	PS::F64vec xj[nj];
+
+#if 0	
+	std::cerr << "calcforcesomono  called with "<<ni << " "<< nj << " ips:\n";
+	for(int i=0; i<ni; i++){
+	    std::cerr << i << " "<< pi[i].getPosCar()<< " " <<
+		pi[i].getPos() << " "
+		<< force[i].acc<< " " <<
+	    force[i].pot<<"\n";"\n";
+	}
+	std::cerr << "jps:\n";
+	
+	for(int j=0; j<nj; j++){
+	    std::cerr << j << " " << pj[j].getCharge() << " " <<  pj[j].getPosCar()<< " "
+		      <<  pj[j].getPos()<<    	    "\n";
+	}
+#endif	
+	for(auto j=0; j<nj; j++){
+	    xj[j] = pj[j].getPosCar();
+	}
+	for(auto i=0; i<ni; i++){
+	    const auto xi = pi[i].getPosCar();
+	    PS::F64vec ai = 0.0;
+	    PS::F64 poti  = 0.0;
+	    for(auto j=0; j<nj; j++){
+		//PS::F64vec rij    = xi - pj[j].getPosCar();
+		const auto rij    = xi - xj[j];
+		auto r3_inv = rij * rij + eps2;
+		auto r_inv  = 1.0/sqrt(r3_inv);
+		r3_inv  = r_inv * r_inv;
+		r_inv  *= pj[j].getCharge();
+		r3_inv *= r_inv;
+		ai     -= r3_inv * rij;
+		poti   -= r_inv;
+		//std::cerr << i<< " " << j << " " << r_inv << " " << poti <<"\n";
+	    }
+	    force[i].acc += ai;
+	    force[i].pot += poti;
+	}
+#if 0	
+	std::cerr << "calcforcesomono  results "<<ni << " "<< nj << " ips:\n";
+	for(int i=0; i<ni; i++){
+	    std::cerr << i << " "<< force[i].acc<< " " <<
+		force[i].pot<<"\n";
+	}
+#endif	
+	
+    }
+};
+
+template<typename Tpi, typename Tpj, typename Tforce>
+struct CalcForceSpQuad{
+    void operator ()(const Tpi * pi,
+                     const PS::S32 ni,
+                     const Tpj * pj,
+                     const PS::S32 nj,
+                     Tforce * force){
+        const auto eps2 = FPGrav::eps*FPGrav::eps;
+	PS::F64vec xj[nj];
+	for(auto j=0; j<nj; j++){
+	  xj[j] = pj[j].getPosCar();
+	}
+        for(auto i=0; i<ni; i++){
+            PS::F64vec xi = pi[i].getPosCar();
+            PS::F64vec ai = 0.0;
+            PS::F64 poti = 0.0;
+            for(auto j=0; j<nj; j++){
+                PS::F64 mj = pj[j].getCharge();
+                //PS::F64vec xj= pj[j].getPosCar();
+                //PS::F64vec rij= xi - xj;
+		PS::F64vec rij = xi - xj[j];
+                PS::F64 r2 = rij * rij + eps2;
+                PS::F64mat qj = pj[j].quad;
+                PS::F64 tr = qj.getTrace();
+                PS::F64vec qr( (qj.xx*rij.x + qj.xy*rij.y + qj.xz*rij.z),
+                               (qj.yy*rij.y + qj.yz*rij.z + qj.xy*rij.x),
+                               (qj.zz*rij.z + qj.xz*rij.x + qj.yz*rij.y) );
+                PS::F64 qrr = qr * rij;
+                PS::F64 r_inv = 1.0f/sqrt(r2);
+                PS::F64 r2_inv = r_inv * r_inv;
+                PS::F64 r3_inv = r2_inv * r_inv;
+                PS::F64 r5_inv = r2_inv * r3_inv * 1.5;
+                PS::F64 qrr_r5 = r5_inv * qrr;
+                PS::F64 qrr_r7 = r2_inv * qrr_r5;
+                PS::F64 A = mj*r3_inv - tr*r5_inv + 5*qrr_r7;
+                PS::F64 B = -2.0*r5_inv;
+                ai -= A*rij + B*qr;
+                poti -= mj*r_inv - 0.5*tr*r3_inv + qrr_r5;
+            }
+            force[i].acc += ai;
+            force[i].pot += poti;
+        }
+    }
+};
+

@@ -1,6 +1,7 @@
 User's Guide for nbody-with-center
 
                        2019/11/26 牧野
+                       2021/09/10 アップデート
 
 # はじめに
 
@@ -16,6 +17,13 @@ User's Guide for nbody-with-center
 * PHANTOM_GRAPE はサポートされない
 
 というあたりが違いである。PHANTOM_GRAPE がなくて遅いので、誰か改良して下さいな
+
+ make nbody-with-center :            OpenMP サポート、重心近似
+ make nbody-with-center-quad :       OpenMP サポート、4重極近似
+ make nbody-with-center-mpi :   OpenMP+MPI サポート、重心近似
+ make nbody-with-center-quad-mpi :   OpenMP+MPI サポート、4重極近似
+
+の4種類の実行ファイルをつくれる。MPI で高精度にするなら最後のを使うこと。
 
 # 実行
 
@@ -39,7 +47,7 @@ User's Guide for nbody-with-center
 
  -e: 衝突時のダンピング係数 eta である。デフォルトは 0
 
- -p: 重力ソフトニングである。デフォルトは 1/32
+ -p: 重力ソフトニングである。デフォルトは 0
  
  -r: 粒子の物理半径である。デフォルトは0
 
@@ -49,7 +57,7 @@ User's Guide for nbody-with-center
 
  -T: シミュレーション終了時刻である。デフォルトは10
 
- -s: 時間刻みである。デフォルトは 1/128
+ -s: 時間刻みである。デフォルトは 1/512
 
  -d: ログ出力の時間間隔である。デフォルトは 1/8
  
@@ -63,7 +71,15 @@ User's Guide for nbody-with-center
  
  -N: 初期条件を生成する時の粒子数である。デフォルトは 1024。入力ファイ
      ルが指定されていると無視される。
-     
+
+ -K: 粒子同士が衝突した時ににはねかえるまでの時間(振動周期の半分)をタ
+     イムステップで表した値。デフォルトは 32 である。この値が正である
+     と -k, -e の値に関わらずこれと S オプションから係数が計算される。
+ -S: 反発係数。デフォルト 0.5。垂直方向の反発係数である。接線方向は0。
+
+ -R: MPI 並列の時の半径方向の領域分割の数。デフォルトは1である。リング
+     の幅とプロセス数を考慮して適切な値を設定すること。
+  
   -h: ヘルプメッセージを出力して終了する。
 
 
@@ -81,21 +97,24 @@ User's Guide for nbody-with-center
 
 # 実行例
 
-    nbody-with-center -i ringin -o out -s 2e-4 -d 2e-3 -D 2e-3 -T 0.5 -e   10 -p 0 -r 0.004 -k 2e4 -M 1
+ nbody-with-center-quad  -i ringin -o out -T 0.5 -M 1 -K 128 -s 2e-4 -r 0.004
+
 
 出力の最後のほうが
 
-    time:  0.4980073 energy error: -2.043143e-09
-    ekin, epot, etot= 0.00047664 -0.000954101 -0.000477461
-    ekin, epot, etot= 0.00047664 -0.000954101 -0.000477461
-    ekin, epot, etot= 0.00047664 -0.000954101 -0.000477461
-    ekin, epot, etot= 0.00047664 -0.000954101 -0.000477461
-    ekin, epot, etot= 0.00047664 -0.000954101 -0.000477461
-    ekin, epot, etot= 0.00047664 -0.000954101 -0.000477461
-    ekin, epot, etot= 0.00047664 -0.000954101 -0.000477461
-    ekin, epot, etot= 0.00047664 -0.000954101 -0.000477461
-    ekin, epot, etot= 0.00047664 -0.000954101 -0.000477461
+time:  0.0000000 energy error: -1.135375e-16
+time:  0.1250010 energy error: -3.603814e-09
+time:  0.2500031 energy error: -4.232810e-09
+time:  0.3750052 energy error: -4.287554e-09
+
+で、エネルギー誤差が 1e-8 以下なら問題なく動作している。
     
+# 更新履歴
+
+2020/9/10
+
+* FDPS 7.0 に対応して、円筒座標での計算をサポートした。
+* オプションを増やし、デフォルトで反発係数が 0.5 になるようにした。
 
 
 
