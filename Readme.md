@@ -102,10 +102,10 @@ User's Guide for nbody-with-center
 
 出力の最後のほうが
 
-time:  0.0000000 energy error: -1.135375e-16
-time:  0.1250010 energy error: -3.603814e-09
-time:  0.2500031 energy error: -4.232810e-09
-time:  0.3750052 energy error: -4.287554e-09
+ time:  0.0000000 energy error: -1.135375e-16
+ time:  0.1250010 energy error: -3.603814e-09
+ time:  0.2500031 energy error: -4.232810e-09
+ time:  0.3750052 energy error: -4.287554e-09
 
 で、エネルギー誤差が 1e-8 以下なら問題なく動作している。
     
