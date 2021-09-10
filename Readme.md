@@ -18,10 +18,12 @@ User's Guide for nbody-with-center
 
 というあたりが違いである。PHANTOM_GRAPE がなくて遅いので、誰か改良して下さいな
 
+```
  make nbody-with-center :            OpenMP サポート、重心近似
  make nbody-with-center-quad :       OpenMP サポート、4重極近似
  make nbody-with-center-mpi :   OpenMP+MPI サポート、重心近似
  make nbody-with-center-quad-mpi :   OpenMP+MPI サポート、4重極近似
+```
 
 の4種類の実行ファイルをつくれる。MPI で高精度にするなら最後のを使うこと。
 
@@ -102,10 +104,12 @@ User's Guide for nbody-with-center
 
 出力の最後のほうが
 
+```
  time:  0.0000000 energy error: -1.135375e-16
  time:  0.1250010 energy error: -3.603814e-09
  time:  0.2500031 energy error: -4.232810e-09
  time:  0.3750052 energy error: -4.287554e-09
+```
 
 で、エネルギー誤差が 1e-8 以下なら問題なく動作している。
     
