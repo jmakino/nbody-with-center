@@ -16,14 +16,24 @@ constexpr PS::F64 MY_PI = M_PI;
 #endif
 #include "user-defined.hpp"
 
+void mybarrier()
+{
+#ifdef PARTICLE_SIMULATOR_MPI_PARALLEL
+    PS::Comm::barrier();
+#endif
+}
+
+const PS::S32 n_tadds=10;
 class ElapsedTimes{
 public:
     PS::F64 t_domain_decomposition;
     PS::F64 t_exchange_particle;
     PS::F64 t_treeforce;
+    PS::F64 t_treeforce2;
     PS::F64 t_misc;
     PS::F64 t_total;
     PS::F64 t_offset;
+    PS::F64 t_additional[n_tadds];
     PS::S32 steps;
     void clear()
     {
@@ -32,8 +42,10 @@ public:
 	t_domain_decomposition=0;
 	t_exchange_particle =0;
 	t_treeforce=0;
+	t_treeforce2=0;
 	t_misc=0;
 	steps=0;
+	for(int i=0;i<n_tadds; i++)t_additional[i]=0;
     }
     void measure(int start,
 		 int mode)
@@ -56,6 +68,11 @@ public:
 		t_exchange_particle += dt;
 	    }else if (mode == 2){
 		t_treeforce+= dt;
+	    }else if (mode == 3){ 
+		t_treeforce2+= dt;
+	    }else if (mode > 3){ 
+		//		fprintf(stderr, "mode=%d dt=%e\n", mode, dt);
+		t_additional[mode-4]+=dt;
 	    }
 	}
     }
@@ -63,23 +80,83 @@ public:
     {
 	steps++;
     }
-    void print(FILE* f)
+    void print(FILE* f,
+	       PS::Count_t ncep,
+	       PS::Count_t ncsp)
     {
-	t_total = PS::GetWtime() - t_offset;
-	t_misc = t_total - t_domain_decomposition - t_exchange_particle
-	    - t_treeforce;
-	if (steps==0)return;
-	fprintf(f,"Total time=%e steps=%d, t=%e dd=%e exch=%e force=%e misc=%e\n",
-		t_total, steps, t_total/steps,
-		t_domain_decomposition/steps,
-		t_exchange_particle/steps,
-		t_treeforce/steps,
-		t_misc/steps);
+	if(PS::Comm::getRank() == 0){
+	    t_total = PS::GetWtime() - t_offset;
+	    t_misc = t_total - t_domain_decomposition - t_exchange_particle
+		- t_treeforce - t_treeforce2;
+	    if (steps==0)return;
+	    fprintf(f," Total time=%.4g steps=%d, t=%.4g dd=%.4g exch=%.4g force=%.4g,%.4g misc=%.4g",
+		    t_total, steps, t_total/steps,
+		    t_domain_decomposition/steps,
+		    t_exchange_particle/steps,
+		    t_treeforce/steps,
+		    t_treeforce2/steps,
+		    t_misc/steps);
+	    fprintf(f," ints= %.4g %.4g %.4g\n",
+		    ((double)ncep)/steps,
+		    ((double)ncsp)/steps,
+		    ((double)(ncep+ncsp))/steps);
+	    for(int i=0;i<4;i++){
+		fprintf(f," ta[%d]=%.4g", i, t_additional[i]/steps);
+	    }
+	    fprintf(f,"\n");
+	    
+	}
+	
     }
 };
 
 		
-		    
+template<class Tpsys>
+void generate_initial_cold_disk(PS::S64 nx,
+				PS::S64 ny,
+				int np,
+				int myid,
+				PS::F64 width,
+				PS::F64 mass,
+				Tpsys & psys,
+				PS::S32 & n_loc)
+{
+    PS::S64 mymin = (nx+0.5)/np*myid;
+    PS::S64 mymax = (nx+0.5)/np*(myid+1);
+    //    fprintf(stderr, "initial disk nx=%lld ny=%lld width=%e  np=%d, id=%d, min=%lld, max==%lld\n",
+    //	    nx,ny, width,  np, myid, mymin, mymax);
+    if (mymax  > nx) mymax = nx;
+    auto nxlocal = mymax - mymin;
+    n_loc = nxlocal * ny;
+    psys.setNumberOfParticleLocal(n_loc);
+    PS::S64 id = mymin * ny;
+    PS::S64 i=0;
+    for(PS::S32 ix = 0; ix < nxlocal; ix++){
+	PS::F64 theta = (ix + mymin+0.5)*2*M_PI/nx - M_PI;
+	PS::F64 x0 = cos(theta);
+	PS::F64 y0 = sin(theta);
+	PS::F64 dr;
+	if (ny > 1){
+	    dr=  width /(ny -1);
+	}else{
+	    dr = 0;
+	}
+	//	fprintf(stderr, "ix  x0, y0, theta, width, dr = %d %e %e %e %e %e\n",
+	//		ix, x0, y0, theta, width, dr);
+	for(PS::S32 iy = 0; iy < ny; iy++){
+	    PS::F64 rscale = (iy* dr) + 1.0 - width/2;
+	    auto vscale = 1.0/sqrt(rscale);
+	    psys[i].pos_car  = PS::F64vec(x0*rscale, y0*rscale, 0.0);
+	    psys[i].vel  = PS::F64vec(-y0*vscale, x0*vscale, 0.0);
+	    psys[i].mass  = mass;
+	    psys[i].id   = id;
+	    i++;
+	    id++;
+	    
+	}
+    }
+}
+
 	
     
     
@@ -157,6 +234,7 @@ void kick(Tpsys & system,
           const PS::F64 dt) {
     PS::S32 n = system.getNumberOfParticleLocal();
     //    std::cerr << "Kick\n";
+#pragma omp parallel for
     for(PS::S32 i = 0; i < n; i++) {
 	// 	std::cerr << i << " "<< system[i].acc <<
 	//	    " "<< system[i].pot << " " <<system[i].pos_car << "\n" ;
@@ -168,6 +246,7 @@ template<class Tpsys>
 void dtoc(Tpsys & system)
 {
     PS::S32 n = system.getNumberOfParticleLocal();
+#pragma omp parallel for
     for(PS::S32 i = 0; i < n; i++) {
         system[i].dtoc();
     }
@@ -177,6 +256,7 @@ template<class Tpsys>
 void add_central_gravity(Tpsys & system)
 {
     PS::S32 n = system.getNumberOfParticleLocal();
+#pragma omp parallel for
     for(PS::S32 i = 0; i < n; i++) {
 	system[i].add_central_gravity();
     }
@@ -196,6 +276,7 @@ template<class Tpsys>
 void drift(Tpsys & system,
            const PS::F64 dt) {
     PS::S32 n = system.getNumberOfParticleLocal();
+#pragma omp parallel for
     for(PS::S32 i = 0; i < n; i++) {
         system[i].pos_car  += system[i].vel * dt;
     }
@@ -250,12 +331,15 @@ void printHelp() {
     std::cerr<<"S: replulsion coef (default: 0.5)"<<std::endl;
     std::cerr<<"R: number of divisions in radial direction   (default: 1)"<<std::endl;
     std::cerr<<"b: show time profile"<<std::endl;
+    std::cerr<<"E: set exchange let mode (0,1,2, default=0)"<<std::endl;
+    std::cerr<<"I: Initial disk model (nx, ny, width, mass. default=1000,20,0.1,5r-8)"<<std::endl;
     std::cerr<<"h: help"<<std::endl;
 }
 
 void makeOutputDirectory(char * dir_name) {
     struct stat st;
     PS::S32 ret;
+    if (dir_name[0]==0) return;
     if (PS::Comm::getRank() == 0) {
         if (stat(dir_name, &st) != 0) {
             ret = mkdir(dir_name, 0777);
@@ -284,23 +368,123 @@ void set_coeffs( PS::F64 *kappa,
     *kappa = 4*M_PI*M_PI/(period*period) + (*eta)*(*eta)/4.0;
 }
 
+template<class Tpsys>
 void printtimeprofile(PS::TimeProfile tp,
-		      FILE* f)
+		      PS::TimeProfile tps,
+		      PS::TimeProfile tpd,
+		      FILE* f,
+		      Tpsys &system, // particle system
+		      int steps)
 {
-    fprintf(f, "cs: %e dd: %e ep:%e ml:%e mg:%e cf:%e cml:%e cmg:%e lets: %e %e %e %e\n",
-	    tp.collect_sample_particle,
-	    tp.decompose_domain,
-	    tp.exchange_particle,
-	    tp.make_local_tree,
-	    tp.make_global_tree,
-	    tp.calc_force,
-	    tp.calc_moment_local_tree,
-	    tp.calc_moment_global_tree,
-	    tp.make_LET_1st,
-	    tp.make_LET_2nd,
-	    tp.exchange_LET_1st,
-	    tp.exchange_LET_2nd
-	    );
+    if (steps==0)steps=1;
+    auto nsend = system.getNumberOfParticleSendGlobal();
+    PS::F64  nslocal = (PS::F64)system.getNumberOfParticleSendLocal();
+    auto nsmax = PS::Comm::getMaxValue(nslocal);
+    auto epepmax = PS::Comm::getMaxValue(tps.exchange_particle__exchange_particle);
+    auto epepmin = PS::Comm::getMinValue(tps.exchange_particle__exchange_particle);
+    auto epfmax = PS::Comm::getMaxValue(tps.exchange_particle__find_particle);
+    auto epfmin = PS::Comm::getMinValue(tps.exchange_particle__find_particle);
+    auto epepmax1=PS::Comm::getMaxValue(tps.exchange_particle__exchange_particle_1);
+    auto epepmin1=PS::Comm::getMinValue(tps.exchange_particle__exchange_particle_1);
+    auto epepmax2=PS::Comm::getMaxValue(tps.exchange_particle__exchange_particle_2);
+    auto epepmax3=PS::Comm::getMaxValue(tps.exchange_particle__exchange_particle_3);
+    auto el1max=PS::Comm::getMaxValue(tp.exchange_LET_1st);
+    auto el1min=PS::Comm::getMinValue(tp.exchange_LET_1st);
+    auto el1topmax=PS::Comm::getMaxValue(tp.make_LET_1st__exchange_top_moment);
+    auto el1tfp=PS::Comm::getMaxValue(tp.make_LET_1st__find_particle);
+    auto el1tnmax=PS::Comm::getMaxValue(tp.make_LET_1st__exchange_n);
+    auto el1ticp=PS::Comm::getMaxValue(tp.exchange_LET_1st__icomm_ptcl);
+    auto cfmax=PS::Comm::getMaxValue(tp.calc_force);
+    auto cfwt=PS::Comm::getMaxValue(tp.calc_force__core__walk_tree);
+    auto cfmkipg=PS::Comm::getMaxValue(tp.calc_force__make_ipgroup);
+    auto cfc=PS::Comm::getMaxValue(tp.calc_force__core);
+    auto cs=PS::Comm::getMaxValue(tpd.collect_sample_particle);
+    auto dd=PS::Comm::getMaxValue(tpd.decompose_domain);
+    auto ddgp=PS::Comm::getMaxValue(tpd.decompose_domain__gather_particle);
+    auto dds1=PS::Comm::getMaxValue(tpd.decompose_domain__sort_particle_1st);
+    auto dds2=PS::Comm::getMaxValue(tpd.decompose_domain__sort_particle_2nd);
+    auto dds3=PS::Comm::getMaxValue(tpd.decompose_domain__sort_particle_3rd);
+    auto dded=PS::Comm::getMaxValue(tpd.decompose_domain__exchange_pos_domain);
+    auto ddb=PS::Comm::getMaxValue(tpd.decompose_domain__barrier);
+    auto ddp=PS::Comm::getMaxValue(tpd.decompose_domain__postprocess);
+    auto ep=PS::Comm::getMaxValue(tps.exchange_particle);
+    auto ml=PS::Comm::getMaxValue(tp.make_local_tree);
+    auto mg=PS::Comm::getMaxValue(tp.make_global_tree);
+    auto cf=PS::Comm::getMaxValue(tp.calc_force);
+    auto cml=PS::Comm::getMaxValue(tp.calc_moment_local_tree);
+    auto cmg=PS::Comm::getMaxValue(tp.calc_moment_global_tree);
+    auto ml1=PS::Comm::getMaxValue(tp.make_LET_1st);
+    auto ml2=PS::Comm::getMaxValue(tp.make_LET_2nd);
+    auto el1=PS::Comm::getMaxValue(tp.exchange_LET_1st);
+    auto el2=PS::Comm::getMaxValue(tp.exchange_LET_2nd);
+    
+    if(PS::Comm::getRank() == 0){
+	fprintf(f, " cs: %.4g dd: %.4g ep:%.4g ml:%.4g mg:%.4g cf:%.4g cml:%.4g cmg:%.4g lets: %.4g %.4g %.4g %.4g\n",
+		cs/steps,
+		dd/steps,
+		ep/steps,
+		ml/steps,
+		mg/steps,
+		cf/steps,
+		cml/steps,
+		cmg/steps,
+		ml1/steps,
+		ml2/steps,
+		el1/steps,
+		el2/steps);
+	auto alltp = tp+tps+tpd;
+	fprintf(f, " epf=%.4g %.4g %.4g epe=%.4g %.4g %.4g  mkl=%.4g msl=%.4g lcl=%.4g msg=%.4g lcg=%.4g ",
+		alltp.exchange_particle__find_particle/steps,
+		epfmax/steps,
+		epfmin/steps,
+		alltp.exchange_particle__exchange_particle/steps,
+		epepmax/steps,
+		epepmin/steps,
+		tp.morton_key_local_tree/steps,
+		alltp.morton_sort_local_tree/steps,
+		alltp.link_cell_local_tree/steps,
+		alltp.morton_sort_global_tree/steps,
+		alltp.link_cell_global_tree/steps);
+	fprintf(f, "ns=%.4g nsmax=%.4g\n",
+		(PS::F64) nsend/steps,
+		(PS::F64) nsmax/steps);
+#if 1	 //details for domain decomposition
+	fprintf(f, " ddgp=%.4g s1=%.4g s2=%.4g s3=%.4g b=%.4g ed=%.4g p=%.4g",
+		ddgp/steps,
+		dds1/steps,
+		dds2/steps,
+		dds3/steps,
+		ddb/steps,
+		dded/steps,
+		ddp/steps);
+#endif	
+#if 1	 //details for exchange particles
+	fprintf(f, " epeptimes=%.4g %.4g %.4g %.4g",
+		epepmax1/steps,
+		epepmin1/steps,
+		epepmax2/steps,
+		epepmax3/steps);
+#endif	
+	fprintf(f, " el1=%.4g %.4g tm=%.4g fp=%.4g en=%.4g commp=%.4g",
+		el1max/steps,
+		el1min/steps,
+		el1topmax/steps,
+		el1tfp/steps,
+		el1tnmax/steps,
+		el1ticp/steps);
+
+	fprintf(f,"\n");
+	fprintf(f, " cfmax=%.4g wt=%.4g ipg=%.4g core=%.4g",
+		cfmax/steps,
+		cfwt/steps,
+		cfmkipg/steps,
+		cfc/steps	);
+	fprintf(f,"\n");
+
+	
+		
+    }
+    
 }
     
 
@@ -341,13 +525,21 @@ int main(int argc, char *argv[]) {
     PS::S32 ny_for_dd = 1;
     PS::S32 show_time_profile = 0;
     char dir_name[1024];
+    PS::S32 makeoutput=0;
     char in_name[1024];
     PS::S64 n_tot = 1024;
     PS::S32 c;
-    strncpy(dir_name,"./result", 1000);
+    PS::S32 exchange_let_mode = 0;
+    PS::S64 nxinit = 1000;
+    PS::S64 nyinit = 20;
+    PS::F64 widthinit = 0.1;
+    PS::F64 massinit = 5e-8;
+    
+    //    strncpy(dir_name,"./result", 1000);
+    dir_name[0]=0;
     in_name[0]=0;
     opterr = 0;
-    while((c=getopt(argc,argv,"i:r:k:e:p:o:d:D:t:T:l:M:n:N:hs:K:S:R:b")) != -1){
+    while((c=getopt(argc,argv,"i:r:k:e:p:o:d:D:t:T:l:M:n:N:hs:K:S:R:bE:I:")) != -1){
         switch(c){
         case 'i':
 	    strncpy(in_name,optarg,1000);
@@ -355,6 +547,7 @@ int main(int argc, char *argv[]) {
         case 'o':
 	    //            sprintf(dir_name,optarg);
 	    strncpy(dir_name,optarg,1000);
+	    makeoutput = 1;
             break;
         case 'M':
             FPGrav::mass_center	= atof(optarg);
@@ -408,6 +601,12 @@ int main(int argc, char *argv[]) {
         case 'b':
             show_time_profile = 1;
             break;
+        case 'E':
+            exchange_let_mode = atoi(optarg);
+            break;
+        case 'I':
+	    sscanf(optarg,"%lld,%lld,%lf,%lf", &nxinit, &nyinit, &widthinit, &massinit);
+            break;
         case 'h':
             if(PS::Comm::getRank() == 0) {
                 printHelp();
@@ -441,6 +640,11 @@ int main(int argc, char *argv[]) {
 	std::cerr << "n_group_limit = " << n_group_limit << std::endl;
 	std::cerr << "n_tot = " << n_tot << std::endl;
 	std::cerr << "ny_for_dd = " << ny_for_dd << std::endl;
+	std::cerr << "exchange_let_mode = " << exchange_let_mode<< std::endl;
+	std::cerr << "nxinit = " << nxinit<< std::endl;
+	std::cerr << "nyinit = " << nyinit<< std::endl;
+	std::cerr << "widthinit = " << widthinit<< std::endl;
+	std::cerr << "massinit = " << massinit<< std::endl;
     }
     makeOutputDirectory(dir_name);
 
@@ -458,16 +662,18 @@ int main(int argc, char *argv[]) {
     PS::ParticleSystem<FPGrav> system_grav;
     system_grav.initialize();
     system_grav.clearTimeProfile();
+    system_grav.clearCounterAll();
     PS::S32 n_loc    = 0;
     PS::F32 time_sys = 0.0;
     //    fprintf(stderr,"process %d enter initial condition\n",  PS::Comm::getRank());
     if (in_name[0]==0){
-	if(PS::Comm::getRank() == 0) {
-	    //	fprintf(stderr,"in_name = %s\n",in_name);
-	    setParticlesColdUniformSphere(system_grav, n_tot, n_loc);
-	}else{
-	    system_grav.setNumberOfParticleLocal(n_loc);
-	}
+	generate_initial_cold_disk(nxinit, nyinit,
+				   PS::Comm::getNumberOfProc(),
+				   PS::Comm::getRank(),
+				   widthinit,
+				   massinit,
+				   system_grav, n_loc);
+	
     }else{
 	FileHeader header;
 	//	fprintf(stderr,"reading in_name = %s\n",in_name);
@@ -528,7 +734,22 @@ int main(int argc, char *argv[]) {
  Tree_t tree_grav;
     
     tree_grav.initialize(n_tot, theta, n_leaf_limit, n_group_limit);
+    auto exchange_text = "A2A";
+    if (exchange_let_mode == 0){
+	tree_grav.setExchangeLETMode(PS::EXCHANGE_LET_A2A);
+    }else if (exchange_let_mode == 1){
+	tree_grav.setExchangeLETMode(PS::EXCHANGE_LET_P2P_EXACT);
+    exchange_text = "P2P_EXACT";
+    }else if (exchange_let_mode == 2){
+	tree_grav.setExchangeLETMode(PS::EXCHANGE_LET_P2P_FAST);
+	exchange_text = "P2P_FAST";
+    }
+    if(PS::Comm::getRank() == 0){
+	fprintf(stdout, " EXCHANGE_LET_MODE = %s\n", exchange_text);
+    }
     tree_grav.clearTimeProfile();
+    tree_grav.clearNumberOfInteraction();
+    
 #ifdef MULTI_WALK
     const PS::S32 n_walk_limit = 200;
     const PS::S32 tag_max = 1;
@@ -552,56 +773,82 @@ int main(int argc, char *argv[]) {
     PS::F64 time_diag = 0.0;
     PS::F64 time_snap = 0.0;
     PS::S64 n_loop = 0;
+    PS::S64 n_loop_diag = 0;
     PS::S32 id_snap = 0;
     ElapsedTimes et;
     et.clear();
     while(time_sys < time_end){
+	et.measure(1,6);
+	
         if( (time_sys >= time_snap) || ( (time_sys + dt) - time_snap ) > (time_snap - time_sys) ){
             char filename[256];
             sprintf(filename, "%s/%04d.dat", dir_name, id_snap++);
             FileHeader header;
             header.time   = time_sys;
             header.n_body = system_grav.getNumberOfParticleGlobal();
-            system_grav.writeParticleAscii(filename, header);
+            if (makeoutput) system_grav.writeParticleAscii(filename, header);
             time_snap += dt_snap;
         }
 
         calcEnergy(system_grav, Etot1, Ekin1, Epot1);
+	if (show_time_profile)   mybarrier();
         
-        if(PS::Comm::getRank() == 0){
-            if( (time_sys >= time_diag) || ( (time_sys + dt) - time_diag ) > (time_diag - time_sys) ){
+	if( (time_sys >= time_diag) || ( (time_sys + dt) - time_diag ) > (time_diag - time_sys) ){
+	    PS::Count_t ncepglobal = tree_grav.getNumberOfInteractionEPEPGlobal();
+	    PS::Count_t ncspglobal = tree_grav.getNumberOfInteractionEPSPGlobal();
+	    PS::TimeProfile tp = tree_grav.getTimeProfile();
+	    PS::TimeProfile tps = system_grav.getTimeProfile();
+	    PS::TimeProfile tpd = dinfo.getTimeProfile();
+	    
+	    if(PS::Comm::getRank() == 0){
                 fout_eng << time_sys << "   " << (Etot1 - Etot0) / Etot0 <<
 		    " " << Etot1 << " " << Ekin1 << " " << Epot1 <<std::endl;
                 fprintf(stdout, "time: %10.7f energy error: %+e\n",
                         time_sys, (Etot1 - Etot0) / Etot0);
-                time_diag += dt_diag;
-		PS::TimeProfile tp = tree_grav.getTimeProfile();
-		if (show_time_profile){
-		    printtimeprofile(tp, stdout);
-		    et.print(stdout);
-			//  fprintf(stdout,"Wall clock time=%10.5f\n", PS::GetWtime()-time0);
-		}
-		fflush(stdout);
+
             }
+	    if (show_time_profile){
+		printtimeprofile(tp, tps, tpd, stdout, system_grav, et.steps);
+		et.print(stdout,ncepglobal, ncspglobal  );
+		//  fprintf(stdout,"Wall clock time=%10.5f\n", PS::GetWtime()-time0);
+	    }
+	    if(PS::Comm::getRank() == 0 && n_loop_diag %32== 0) fflush(stdout);
+	    n_loop_diag ++;
+	    tree_grav.clearTimeProfile();
+	    dinfo.clearTimeProfile();
+	    system_grav.clearTimeProfile();
+	    system_grav.clearCounterAll();
+	    tree_grav.clearNumberOfInteraction();
+	    et.clear();
+	    time_diag += dt_diag;
 	    
         }
         
+	et.measure(0,6);
+	et.measure(1,5);
         
         kick(system_grav, dt * 0.5);
         
         time_sys += dt;
         drift(system_grav, dt);
         dtoc(system_grav);
+	if (show_time_profile)   mybarrier();
+	et.measure(0,5);
         
+	et.measure(1,0);
         if(n_loop % 4 == 0){
-	    et.measure(1,0);
             dinfo.decomposeDomainAll(system_grav);
-	    et.measure(0,0);
         }
         
+	et.measure(0,0);
+	et.measure(1,7);
+	if (show_time_profile)   mybarrier();
+	et.measure(0,7);
 	et.measure(1,1);
         system_grav.exchangeParticle(dinfo);
 	et.measure(0,1);
+	
+	et.measure(1,2);
 #ifdef MULTI_WALK
         tree_grav.calcForceAllAndWriteBackMultiWalk(DispatchKernelWithSP,
                                                     RetrieveKernel,
@@ -611,21 +858,26 @@ int main(int argc, char *argv[]) {
                                                     n_walk_limit,
                                                     true);
 #else
-	et.measure(1,2);
         tree_grav.calcForceAllAndWriteBack(CalcForceEp<FPGrav>,
                                            CalcForceSp(),
                                            system_grav,
                                            dinfo);
 					   //		   true, PS::MAKE_LIST_FOR_REUSE );
-	et.measure(0,2);
-	et.inc_count();
 	
 #endif
+	et.measure(0,2);
+	et.measure(1,3);
+	if (show_time_profile) mybarrier();
+	et.measure(0,3);
+	et.measure(1,4);
 	add_central_gravity(system_grav);
         kick(system_grav, dt * 0.5);
 	//	dump_system(system_grav);
         
+	if (show_time_profile) mybarrier();
+	et.measure(0,4);
         n_loop++;
+	et.inc_count();
     }
     
 #ifdef ENABLE_PHANTOM_GRAPE_X86

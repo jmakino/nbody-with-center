@@ -1,4 +1,4 @@
-PS_PATH =../fdps/fdps-devel/src/
+PS_PATH =../fdps/fdps-test/src/
 
 INC = -I$(PS_PATH)
 
@@ -13,7 +13,7 @@ CC = time g++
 
 CFLAGS = -Kfast,openmp,parallel
 CFLAGS += -DPARTICLE_SIMULATOR_THREAD_PARALLEL -fopenmp
-
+CFLAGS += PARTICLE_SIMULATOR_USE_STD_SORT
 MPICC =  time mpiFCCpx
 
 MPICFLAGS = $(CFLAGS) -DPARTICLE_SIMULATOR_MPI_PARALLEL

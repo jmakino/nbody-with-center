@@ -4,12 +4,15 @@ INC = -I$(PS_PATH)
 
 CC = time g++
 #CC = time mpicxx
-CFLAGS = -O3 --std=c++11 -g
+CFLAGS = -O3 # --std=c++11 
 #CFLAGS += -Wall
-CFLAGS += -ffast-math
+CFLAGS += -ffast-math    -ftree-vectorize  -fopt-info-vec-optimized=vector.txt
+CFLAGS +=  -march=native#  -pg
+#CFLAGS +=  -mavx2
 CFLAGS += -funroll-loops
 CFLAGS += -DPARTICLE_SIMULATOR_THREAD_PARALLEL -fopenmp
 #CFLAGS += -DPARTICLE_SIMULATOR_MPI_PARALLEL
+CFLAGS += -DPARTICLE_SIMULATOR_USE_SAMPLE_SORT
 
 MPICC =  time mpicxx
 MPICFLAGS = $(CFLAGS) -DPARTICLE_SIMULATOR_MPI_PARALLEL
@@ -50,7 +53,7 @@ endif
 
 nbody-with-center:nbody-with-center.cpp user-defined.hpp  $(OBJS)
 	$(PG_BUILD)
-	$(CC) $(INC) $(CFLAGS) -o $@ nbody-with-center.cpp $(CLIBS)
+	$(CC) $(INC) $(CFLAGS) -pg -o $@ nbody-with-center.cpp $(CLIBS)
 nbody-with-center-mpi:nbody-with-center.cpp user-defined.hpp  $(OBJS)
 	$(PG_BUILD)
 	$(MPICC) $(INC) $(MPICFLAGS) -o $@ nbody-with-center.cpp $(CLIBS)
@@ -59,7 +62,7 @@ nbody-with-center-quad-mpi:nbody-with-center.cpp user-defined.hpp  $(OBJS)
 	$(MPICC) $(INC) $(MPICFLAGS) -DQUAD -o $@ nbody-with-center.cpp $(CLIBS)
 nbody-with-center-quad:nbody-with-center.cpp user-defined.hpp  $(OBJS)
 	$(PG_BUILD)
-	$(CC) $(INC) $(CFLAGS) -DQUAD -o $@ nbody-with-center.cpp $(CLIBS)
+	$(CC) $(INC) $(CFLAGS) -pg -DQUAD -o $@ nbody-with-center.cpp $(CLIBS)
 
 clean:
 	rm -f *.o *~ nbody-with-center
