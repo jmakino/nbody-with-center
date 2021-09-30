@@ -504,7 +504,9 @@ using Moment_t = MyMomentMonopole;
 using CalcForceSp = CalcForceSpMono<FPGrav, SPJ_t, FPGrav>;
 #endif
     
-using MY_SEARCH_MODE = PS::SEARCH_MODE_LONG_SCATTER;
+//using MY_SEARCH_MODE = PS::SEARCH_MODE_LONG_SCATTER;
+using MY_SEARCH_MODE = PS::SEARCH_MODE_LONG_SYMMETRY;
+// the use of SEARCH_MODE_LONG_SYMMETRY for test purpose only....
 //using Tree_t = PS::TreeForForce<MY_SEARCH_MODE, FPGrav, FPGrav, FPGrav, Moment_t, Moment_t, SPJ_t, PS::CALC_DISTANCE_TYPE_NORMAL>;
 using Tree_t = PS::TreeForForce<MY_SEARCH_MODE, FPGrav, FPGrav, FPGrav, Moment_t, Moment_t, SPJ_t, PS::CALC_DISTANCE_TYPE_NEAREST_X>;
 
