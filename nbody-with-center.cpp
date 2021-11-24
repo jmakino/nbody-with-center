@@ -23,7 +23,7 @@ void mybarrier()
 #endif
 }
 
-const PS::S32 n_tadds=10;
+const static PS::S32 n_tadds=10;
 class ElapsedTimes{
 public:
     PS::F64 t_domain_decomposition;
@@ -487,33 +487,34 @@ void printtimeprofile(PS::TimeProfile tp,
     
 }
     
+PS::F64  FPGrav::eps = 0;
+PS::F64    FPGrav::rcoll = 0;
+PS::F64    FPGrav::kappa = 0;
+PS::F64    FPGrav::eta = 0;
+PS::F64    FPGrav::mass_center = 1.0;
 
-PS::F64 FPGrav::eps = 0;
-PS::F64 FPGrav::rcoll = 0;
-PS::F64 FPGrav::kappa = 0;
-PS::F64 FPGrav::eta = 0;
-PS::F64 FPGrav::mass_center = 1.0;
 
 #ifdef QUAD
 using SPJ_t    = MySPJQuadrupole;
 using Moment_t = MyMomentQuadrupole;
-using CalcForceSp = CalcForceSpQuad<FPGrav, SPJ_t, FPGrav>;
+using CalcForceSp = CalcForceSpQuad<FPGrav, SPJ_t, ForceGrav>;
 #else
 using SPJ_t    = MySPJMonopole;
 using Moment_t = MyMomentMonopole;
-using CalcForceSp = CalcForceSpMono<FPGrav, SPJ_t, FPGrav>;
+using CalcForceSp = CalcForceSpMono<FPGrav, SPJ_t, ForceGrav>;
 #endif
     
-//using MY_SEARCH_MODE = PS::SEARCH_MODE_LONG_SCATTER;
-using MY_SEARCH_MODE = PS::SEARCH_MODE_LONG_SYMMETRY;
+using MY_SEARCH_MODE = PS::SEARCH_MODE_LONG_SCATTER;
+//using MY_SEARCH_MODE = PS::SEARCH_MODE_LONG_SYMMETRY;
 // the use of SEARCH_MODE_LONG_SYMMETRY for test purpose only....
-//using Tree_t = PS::TreeForForce<MY_SEARCH_MODE, FPGrav, FPGrav, FPGrav, Moment_t, Moment_t, SPJ_t, PS::CALC_DISTANCE_TYPE_NORMAL>;
-using Tree_t = PS::TreeForForce<MY_SEARCH_MODE, FPGrav, FPGrav, FPGrav, Moment_t, Moment_t, SPJ_t, PS::CALC_DISTANCE_TYPE_NEAREST_X>;
+//using Tree_t = PS::TreeForForce<MY_SEARCH_MODE, ForceGrav, FPGrav, EPJGrav, Moment_t, Moment_t, SPJ_t, PS::CALC_DISTANCE_TYPE_NORMAL>;
+using Tree_t = PS::TreeForForce<MY_SEARCH_MODE, ForceGrav, FPGrav, EPJGrav, Moment_t, Moment_t, SPJ_t, PS::CALC_DISTANCE_TYPE_NEAREST_X>;
 
 int main(int argc, char *argv[]) {
     std::cout<<std::setprecision(15);
     std::cerr<<std::setprecision(15);
 
+    
     PS::Initialize(argc, argv);
     PS::F32 theta = 0.5;
     PS::S32 n_leaf_limit = 8;
@@ -543,84 +544,84 @@ int main(int argc, char *argv[]) {
     opterr = 0;
     while((c=getopt(argc,argv,"i:r:k:e:p:o:d:D:t:T:l:M:n:N:hs:K:S:R:bE:I:")) != -1){
         switch(c){
-        case 'i':
-	    strncpy(in_name,optarg,1000);
-            break;
-        case 'o':
-	    //            sprintf(dir_name,optarg);
-	    strncpy(dir_name,optarg,1000);
-	    makeoutput = 1;
-            break;
-        case 'M':
-            FPGrav::mass_center	= atof(optarg);
-            break;
-        case 'k':
-            FPGrav::kappa = atof(optarg);
-            break;
-        case 'p':
-            FPGrav::eps  = atof(optarg);
-            break;
-        case 'e':
-            FPGrav::eta  = atof(optarg);
-            break;
-        case 'r':
-            FPGrav::rcoll  = atof(optarg);
-            break;
-        case 't':
-            theta = atof(optarg);
-            std::cerr << "theta =" << theta << std::endl;
-            break;
-        case 'T':
-            time_end = atof(optarg);
-            break;
-        case 's':
-            dt = atof(optarg);
-            break;
-        case 'd':
-            dt_diag = atof(optarg);
-            break;
-        case 'D':
-            dt_snap = atof(optarg);
-            break;
-        case 'l':
-            n_leaf_limit = atoi(optarg);
-            break;
-        case 'n':
-            n_group_limit = atoi(optarg);
-            break;
-        case 'N':
-            n_tot = atoi(optarg);
-            break;
-        case 'K':
-            ndtbound = atof(optarg);
-            break;
-        case 'R':
-            ny_for_dd = atoi(optarg);
-            break;
-        case 'S':
-            repl_coef = atof(optarg);
-            break;
-        case 'b':
-            show_time_profile = 1;
-            break;
-        case 'E':
-            exchange_let_mode = atoi(optarg);
-            break;
-        case 'I':
-	    sscanf(optarg,"%lld,%lld,%lf,%lf", &nxinit, &nyinit, &widthinit, &massinit);
-            break;
-        case 'h':
-            if(PS::Comm::getRank() == 0) {
-                printHelp();
-            }
-            PS::Finalize();
-            return 0;
-        default:
-            if(PS::Comm::getRank() == 0) {
-                std::cerr<<"No such option! Available options are here."<<std::endl;
-                printHelp();
-            }
-            PS::Abort();
+	    case 'i':
+		strncpy(in_name,optarg,1000);
+		break;
+	    case 'o':
+		//            sprintf(dir_name,optarg);
+		strncpy(dir_name,optarg,1000);
+		makeoutput = 1;
+		break;
+	    case 'M':
+		FPGrav::mass_center	= atof(optarg);
+		break;
+	    case 'k':
+		FPGrav::kappa = atof(optarg);
+		break;
+	    case 'p':
+		FPGrav::eps  = atof(optarg);
+		break;
+	    case 'e':
+		FPGrav::eta  = atof(optarg);
+		break;
+	    case 'r':
+		FPGrav::rcoll  = atof(optarg);
+		break;
+	    case 't':
+		theta = atof(optarg);
+		std::cerr << "theta =" << theta << std::endl;
+		break;
+	    case 'T':
+		time_end = atof(optarg);
+		break;
+	    case 's':
+		dt = atof(optarg);
+		break;
+	    case 'd':
+		dt_diag = atof(optarg);
+		break;
+	    case 'D':
+		dt_snap = atof(optarg);
+		break;
+	    case 'l':
+		n_leaf_limit = atoi(optarg);
+		break;
+	    case 'n':
+		n_group_limit = atoi(optarg);
+		break;
+	    case 'N':
+		n_tot = atoi(optarg);
+		break;
+	    case 'K':
+		ndtbound = atof(optarg);
+		break;
+	    case 'R':
+		ny_for_dd = atoi(optarg);
+		break;
+	    case 'S':
+		repl_coef = atof(optarg);
+		break;
+	    case 'b':
+		show_time_profile = 1;
+		break;
+	    case 'E':
+		exchange_let_mode = atoi(optarg);
+		break;
+	    case 'I':
+		sscanf(optarg,"%lld,%lld,%lf,%lf", &nxinit, &nyinit, &widthinit, &massinit);
+		break;
+	    case 'h':
+		if(PS::Comm::getRank() == 0) {
+		    printHelp();
+		}
+		PS::Finalize();
+		return 0;
+	    default:
+		if(PS::Comm::getRank() == 0) {
+		    std::cerr<<"No such option! Available options are here."<<std::endl;
+		    printHelp();
+		}
+		PS::Abort();
         }
     }
     if (ndtbound > 0.0 )set_coeffs( &(FPGrav::kappa), &(FPGrav::eta),
@@ -629,6 +630,7 @@ int main(int argc, char *argv[]) {
     if(PS::Comm::getRank() == 0) {
 	std::cerr << "central_mass =" << FPGrav::mass_center<< std::endl;
 	std::cerr << "kappa =" << FPGrav::kappa<< std::endl;
+	std::cerr << "theta =" << theta << std::endl;
 	std::cerr << "eps =" << FPGrav::eps << std::endl;
 	std::cerr << "eta =" << FPGrav::eta << std::endl;
 	std::cerr << "repl =" << repl_coef << std::endl;
@@ -711,16 +713,16 @@ int main(int argc, char *argv[]) {
     dinfo.decomposeDomainAll(system_grav);
 
     n_loc = system_grav.getNumberOfParticleLocal();
-	for(auto i=0; i<n_loc; i++){
-	    if(!dinfo.getPosRootDomain().contained(system_grav[i].getPos())){
-		std::cerr<<"n_loc= "<<n_loc<<std::endl;
-		std::cerr<<"dinfo.getPosRootDomain()= "<<dinfo.getPosRootDomain()<<std::endl;
-		std::cerr<<"i= "<<i<<" system_grav[i].getPos()= "<<system_grav[i].getPos()<<std::endl;
-		std::cerr<<"i= "<<i<<" system_grav[i].pos_car= "<<system_grav[i].pos_car<<std::endl;
-		std::cerr<<"i= "<<i<<" system_grav[i].pos= "<<system_grav[i].pos<<std::endl;
-	    }
-	    assert(dinfo.getPosRootDomain().contained(system_grav[i].getPos()));
+    for(auto i=0; i<n_loc; i++){
+	if(!dinfo.getPosRootDomain().contained(system_grav[i].getPos())){
+	    std::cerr<<"n_loc= "<<n_loc<<std::endl;
+	    std::cerr<<"dinfo.getPosRootDomain()= "<<dinfo.getPosRootDomain()<<std::endl;
+	    std::cerr<<"i= "<<i<<" system_grav[i].getPos()= "<<system_grav[i].getPos()<<std::endl;
+	    std::cerr<<"i= "<<i<<" system_grav[i].pos_car= "<<system_grav[i].pos_car<<std::endl;
+	    std::cerr<<"i= "<<i<<" system_grav[i].pos= "<<system_grav[i].pos<<std::endl;
 	}
+	assert(dinfo.getPosRootDomain().contained(system_grav[i].getPos()));
+    }
     
     system_grav.exchangeParticle(dinfo);
     n_loc = system_grav.getNumberOfParticleLocal();
@@ -733,7 +735,7 @@ int main(int argc, char *argv[]) {
     
 
 
- Tree_t tree_grav;
+    Tree_t tree_grav;
     
     tree_grav.initialize(n_tot, theta, n_leaf_limit, n_group_limit);
     auto exchange_text = "A2A";
@@ -741,7 +743,7 @@ int main(int argc, char *argv[]) {
 	tree_grav.setExchangeLETMode(PS::EXCHANGE_LET_A2A);
     }else if (exchange_let_mode == 1){
 	tree_grav.setExchangeLETMode(PS::EXCHANGE_LET_P2P_EXACT);
-    exchange_text = "P2P_EXACT";
+	exchange_text = "P2P_EXACT";
     }else if (exchange_let_mode == 2){
 	tree_grav.setExchangeLETMode(PS::EXCHANGE_LET_P2P_FAST);
 	exchange_text = "P2P_FAST";
@@ -762,11 +764,11 @@ int main(int argc, char *argv[]) {
                                                 dinfo,
                                                 n_walk_limit);
 #else
-    tree_grav.calcForceAllAndWriteBack(CalcForceEp<FPGrav>,
+    tree_grav.calcForceAllAndWriteBack(CalcForceEp<EPJGrav>,
                                        CalcForceSp(),
                                        system_grav,
                                        dinfo);
-				       //				       true, PS::MAKE_LIST_FOR_REUSE );
+    //				       true, PS::MAKE_LIST_FOR_REUSE );
 #endif
     add_central_gravity(system_grav);
     //    dump_system(system_grav);
@@ -860,11 +862,11 @@ int main(int argc, char *argv[]) {
                                                     n_walk_limit,
                                                     true);
 #else
-        tree_grav.calcForceAllAndWriteBack(CalcForceEp<FPGrav>,
+        tree_grav.calcForceAllAndWriteBack(CalcForceEp<EPJGrav>,
                                            CalcForceSp(),
                                            system_grav,
                                            dinfo);
-					   //		   true, PS::MAKE_LIST_FOR_REUSE );
+	//		   true, PS::MAKE_LIST_FOR_REUSE );
 	
 #endif
 	et.measure(0,2);
@@ -889,3 +891,4 @@ int main(int argc, char *argv[]) {
     PS::Finalize();
     return 0;
 }
+

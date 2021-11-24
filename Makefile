@@ -1,24 +1,25 @@
-PS_PATH =../fdps/fdps-devel/src/
+#PS_PATH =../fdps/fdps-devel/src/
+PS_PATH =../fdps/fdps-test/src/
 
 INC = -I$(PS_PATH)
 
 CC = time g++
 #CC = time mpicxx
-CFLAGS = -O3 # --std=c++11 
+CFLAGS = -O3 --std=gnu++1z  # 
 #CFLAGS += -Wall
-CFLAGS += -ffast-math    -ftree-vectorize  -fopt-info-vec-optimized=vector.txt
+CFLAGS += -ffast-math    -ftree-vectorize  -fopt-info-vec-optimized=vector.txt -march=native
 CFLAGS +=  -march=native#  -pg
 #CFLAGS +=  -mavx2
 CFLAGS += -funroll-loops
 CFLAGS += -DPARTICLE_SIMULATOR_THREAD_PARALLEL -fopenmp
 #CFLAGS += -DPARTICLE_SIMULATOR_MPI_PARALLEL
 CFLAGS += -DPARTICLE_SIMULATOR_USE_SAMPLE_SORT
-
+#CFLAGS += -fsanitize=address -fsanitize=leak -static-libasan
 MPICC =  time mpicxx
 MPICFLAGS = $(CFLAGS) -DPARTICLE_SIMULATOR_MPI_PARALLEL
 SRCS = LICENSE  Readme.md nbody-with-center.cpp user-defined.hpp\
       Makefile ringin	 ring.rb	  samplein \
-      Makefile.a64fx
+      Makefile.a64fx Makefile.a64fxclang
 EXPORTDIR = ../nbody-with-center-export
 use_phantom_grape_x86 = no
 #use_gpu_cuda = yes

@@ -53,7 +53,7 @@ endif
 
 nbody-with-center:nbody-with-center.cpp user-defined.hpp  $(OBJS)
 	$(PG_BUILD)
-	$(CC) $(INC) $(CFLAGS) -o $@ nbody-with-center.cpp $(CLIBS)
+	$(CC) -pg $(INC) $(CFLAGS) -o $@ nbody-with-center.cpp $(CLIBS)
 nbody-with-center-mpi:nbody-with-center.cpp user-defined.hpp  $(OBJS)
 	$(PG_BUILD)
 	$(MPICC) $(INC) $(MPICFLAGS) -o $@ nbody-with-center.cpp $(CLIBS)
@@ -62,7 +62,7 @@ nbody-with-center-quad-mpi:nbody-with-center.cpp user-defined.hpp  $(OBJS)
 	$(MPICC) $(INC) $(MPICFLAGS) -DQUAD -o $@ nbody-with-center.cpp $(CLIBS)
 nbody-with-center-quad:nbody-with-center.cpp user-defined.hpp  $(OBJS)
 	$(PG_BUILD)
-	$(CC) $(INC) $(CFLAGS) -DQUAD -o $@ nbody-with-center.cpp $(CLIBS)
+	$(CC) -pg $(INC) $(CFLAGS) -DQUAD -o $@ nbody-with-center.cpp $(CLIBS)
 
 clean:
 	rm -f *.o *~ nbody-with-center
