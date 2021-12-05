@@ -428,59 +428,141 @@ void CalcGravity(const FPGrav * iptcl,
 
 #else
 
+
+
 template <class TParticleJ>
-void CalcForceEpworking(const FPGrav * ep_i,
-			const PS::S32 n_ip,
-			const TParticleJ * ep_j,
-			const PS::S32 n_jp,
-			ForceGrav * force) {
+void CalcForceEpOld(const FPGrav * pi,
+                 const PS::S32 ni,
+                 const TParticleJ * pj,
+                 const PS::S32 nj,
+                 ForceGrav * force) {
+
+#if 0
+    std::cerr << "calcforceep  called with "<<ni << " "<< nj << " ips:\n";
+    for(int i=0; i<ni; i++){
+    	std::cerr << i << " "<< pi[i].pos_car<<
+	    " "<< force[i].acc<< " " <<
+	    force[i].pot<<"\n";
+    }
+    std::cerr << "jps:\n";
+    
+    for(int j=0; j<nj; j++){
+    	std::cerr << j << " " << pj[j].mass << " " <<  pj[j].pos_car<< " "
+		  <<  pj[j].pos<<
+    	    "\n";
+    }
+#endif    
+
     PS::F64 eps2 = FPGrav::eps * FPGrav::eps;
-    for(PS::S32 i = 0; i < n_ip; i++){
-        PS::F64vec xi = ep_i[i].getPos();
-        PS::F64vec ai = 0.0;
-        PS::F64 poti = 0.0;
-        for(PS::S32 j = 0; j < n_jp; j++){
-	    PS::F64vec rij    = xi - ep_j[j].getPos();
-	    PS::F64    r2 = rij * rij + eps2;
-	    if (r2 > 0){
-		PS::F64    r2_inv  = 1.0/r2;
-		PS::F64    r_inv  = sqrt(r2_inv);
-		PS::F64 mr_inv = r_inv* ep_j[j].getCharge();
-		PS::F64  mr3_inv = mr_inv*r2_inv;
-		ai     -= mr3_inv * rij;
-		poti   -= mr_inv;
+    PS::F64 kappa = FPGrav::kappa;
+    PS::F64 eta   = FPGrav::eta;
+    PS::F64 xj[nj];
+    PS::F64 yj[nj];
+    PS::F64 zj[nj];
+    PS::F64 vxj[nj];
+    PS::F64 vyj[nj];
+    PS::F64 vzj[nj];
+    PS::F64 mj[nj];
+    PS::S64 jid[nj];
+    for(int j=0; j<nj; j++){
+	xj[j] = pj[j].pos_car[0];
+	yj[j] = pj[j].pos_car[1];
+	zj[j] = pj[j].pos_car[2];
+	vxj[j] = pj[j].vel[0];
+	vyj[j] = pj[j].vel[1];
+	vzj[j] = pj[j].vel[2];
+	mj[j] = pj[j].getCharge();
+	jid[j] = pj[j].id;
+    }
+	
+    for(int i=0; i<ni; i++){
+	const PS::F64vec xi = pi[i].pos_car;
+	PS::F64vec ai = 0.0;
+	PS::F64 poti = 0.0;
+	PS::F64 dedtdumperi = 0.0;
+	PS::F64 r_coll = FPGrav::rcoll*2;
+	PS::F64  r_coll_inv = 1.0/r_coll;
+	PS::F64 r_coll_sq = r_coll*r_coll;
+	PS::F64 r_coll_third_inv = 1.0/(r_coll_sq*r_coll);
+	PS::F64 r_coll_sq_inv = 1.0/(r_coll*r_coll);
+	PS::F64 xix= pi[i].pos_car[0];
+	PS::F64 xiy = pi[i].pos_car[1];
+	PS::F64 xiz = pi[i].pos_car[2];
+	PS::F64 aix = 0.0;
+	PS::F64 aiy = 0.0;
+	PS::F64 aiz = 0.0;
+	PS::F64 vix = pi[i].vel[0];
+	PS::F64 viy = pi[i].vel[1];
+	PS::F64 viz = pi[i].vel[2];
+	PS::F64 mi = pi[i].getCharge();
+	PS::S64 iid = pi[i].id;
+	
+#pragma omp simd reduction(+:aix,aiy,aiz,poti,dedtdumperi)	    
+	for(int j=0; j<nj; j++){
+	    //	    PS::F64vec rij    = xi - pj[j].pos_car;
+	    PS::F64 rijx    = xix - xj[j];
+	    PS::F64 rijy    = xiy - yj[j];
+	    PS::F64 rijz    = xiz - zj[j];
+	    if(iid != jid[j]) {
+		PS::F64 r2 = rijx*rijx +rijy*rijy +rijz*rijz +eps2;
+		PS::F64 r2_inv  = 1.0/r2;
+		PS::F64 r_inv  =  sqrt(r2_inv);
+		PS::F64 pot = r_inv * mj[j];
+#if 0	    
+		fprintf(stderr, "i=%d j=%d r2 =%g r_coll_sq=%g\n",
+			i, j, r2, r_coll_sq);
+#endif	    
+		if(r_coll_sq < r2){
+		    aix     +=  -pot * r2_inv * rijx;
+		    aiy     +=  -pot * r2_inv * rijy;
+		    aiz     +=  -pot * r2_inv * rijz;
+		    poti   +=  -pot;
+		}else{
+		    aix     +=  -rijx* mj[j]*r_coll_third_inv;;
+		    aiy     +=  -rijy* mj[j]*r_coll_third_inv;;
+		    aiz     +=  -rijz* mj[j]*r_coll_third_inv;;
+		    poti   +=  -mj[j]*r_coll_inv;;
+		    
+		    PS::F64 m_r = mj[j]/ (mi+mj[j]);
+		    PS::F64 r = sqrt(r2);
+		    PS::F64 dr = r_coll-r ;
+		    PS::F64 kappacoef = kappa * m_r * dr/r;
+		    aix += kappacoef* rijx;
+		    aiy += kappacoef* rijy;
+		    aiz += kappacoef* rijz;
+		    //poti += kappa*m_r*dr*dr * 0.5 -dr* pj[j].getCharge()*r_coll_sq_inv;
+		    poti += kappacoef*dr*r * 0.5;
+		    PS::F64vec vij = pi[i].vel - pj[j].vel;
+		    PS::F64 vijx = vix - vxj[j];
+		    PS::F64 vijy = viy - vyj[j];
+		    PS::F64 vijz = viz - vzj[j];
+		    PS::F64 rv = rijx*vijx + rijy*vijy + rijz*vijz;
+		    PS::F64 etacoef = -eta * m_r * rv * r2_inv;
+#if 0		
+		    fprintf(stderr, " ri= %g %g %g vi= %g %g %g\n",
+			    xix, xiy, xiz, vix, viy, viz);
+		    fprintf(stderr, " dr = %g k force, pot =%g %g %g  %g\n",
+			    dr, kappacoef* rijx, kappacoef* rijy,kappacoef* rijz,
+			    kappa*dr*r * 0.5);
+		    
+		    fprintf(stderr, " eta=%g rv=%g  etacoef=%g f= %g %g %g dedt=%g\n",
+			    eta, rv, etacoef,
+			    etacoef * rijx, etacoef * rijy, etacoef * rijz,
+			    -etacoef * rv);
+#endif			
+		    aix += etacoef * rijx;
+		    aiy += etacoef * rijy;
+		    aiz += etacoef * rijz;
+		    dedtdumperi -= etacoef * rv*m_r;
+		}
 	    }
 	}
-	force[i].acc += ai;
+	force[i].acc += PS::F64vec(aix, aiy, aiz);
 	force[i].pot += poti;
+	force[i].dedtdumper += dedtdumperi;
     }
+    
 }
-template <class TParticleJ>
-void CalcForceEporiginal(const FPGrav * ep_i,
-			 const PS::S32 n_ip,
-			 const TParticleJ * ep_j,
-			 const PS::S32 n_jp,
-			 FPGrav * force) {
-    PS::F64 eps2 = FPGrav::eps * FPGrav::eps;
-    for(PS::S32 i = 0; i < n_ip; i++){
-        PS::F64vec xi = ep_i[i].getPos();
-        PS::F64vec ai = 0.0;
-        PS::F64 poti = 0.0;
-        for(PS::S32 j = 0; j < n_jp; j++){
-            PS::F64vec rij    = xi - ep_j[j].getPos();
-            PS::F64    r3_inv = rij * rij + eps2;
-            PS::F64    r_inv  = 1.0/sqrt(r3_inv);
-            r3_inv  = r_inv * r_inv;
-            r_inv  *= ep_j[j].getCharge();
-            r3_inv *= r_inv;
-            ai     -= r3_inv * rij;
-            poti   -= r_inv;
-        }
-        force[i].acc += ai;
-        force[i].pot += poti;
-    }
-}
-
 
 
 template <class TParticleJ>
@@ -556,58 +638,62 @@ void CalcForceEp(const FPGrav * pi,
 	    PS::F64 rijx    = xix - xj[j];
 	    PS::F64 rijy    = xiy - yj[j];
 	    PS::F64 rijz    = xiz - zj[j];
-	    if(iid == jid[j]) continue;
+	    PS::F64 m_r = mj[j]/ (mi+mj[j]);
 	    PS::F64 r2 = rijx*rijx +rijy*rijy +rijz*rijz +eps2;
-	    PS::F64 r2_inv  = 1.0/r2;
-	    PS::F64 r_inv  =  sqrt(r2_inv);
+	    PS::F64 r2_inv;
+	    PS::F64 r_inv;
+	    PS::F64 r = sqrt(r2);
+	    PS::F64 dr = r_coll-r ;
+	    if(r_coll_sq < r2){
+		r2_inv  = 1.0/r2;
+		r_inv  =  sqrt(r2_inv);
+		dr = 0.0;
+		m_r = 0.0;
+	    }else{
+		r_inv = r_coll_inv;
+		r2_inv = r_inv*r_inv;
+		if(iid == jid[j]) m_r=0;
+		
+	    }
 	    PS::F64 pot = r_inv * mj[j];
 #if 0	    
 	    fprintf(stderr, "i=%d j=%d r2 =%g r_coll_sq=%g\n",
 		    i, j, r2, r_coll_sq);
 #endif	    
-	    if(r_coll_sq < r2){
-		aix     +=  -pot * r2_inv * rijx;
-		aiy     +=  -pot * r2_inv * rijy;
-		aiz     +=  -pot * r2_inv * rijz;
-		poti   +=  -pot;
-	    }else{
-		aix     +=  -rijx* mj[j]*r_coll_third_inv;;
-		aiy     +=  -rijy* mj[j]*r_coll_third_inv;;
-		aiz     +=  -rijz* mj[j]*r_coll_third_inv;;
-		poti   +=  -mj[j]*r_coll_inv;;
-		
-		PS::F64 m_r = mj[j]/ (mi+mj[j]);
-		PS::F64 r = sqrt(r2);
-		PS::F64 dr = r_coll-r ;
-		PS::F64 kappacoef = kappa * m_r * dr/r;
-		aix += kappacoef* rijx;
-		aiy += kappacoef* rijy;
-		aiz += kappacoef* rijz;
-		//poti += kappa*m_r*dr*dr * 0.5 -dr* pj[j].getCharge()*r_coll_sq_inv;
-		poti += kappacoef*dr*r * 0.5;
-		PS::F64vec vij = pi[i].vel - pj[j].vel;
-		PS::F64 vijx = vix - vxj[j];
-		PS::F64 vijy = viy - vyj[j];
-		PS::F64 vijz = viz - vzj[j];
-		PS::F64 rv = rijx*vijx + rijy*vijy + rijz*vijz;
-		PS::F64 etacoef = -eta * m_r * rv * r2_inv;
+	    aix     +=  -pot * r2_inv * rijx;
+	    aiy     +=  -pot * r2_inv * rijy;
+	    aiz     +=  -pot * r2_inv * rijz;
+	    poti   +=  -pot;
+	    PS::F64 kappacoef = kappa * m_r * dr/r;
+	    aix += kappacoef* rijx;
+	    aiy += kappacoef* rijy;
+	    aiz += kappacoef* rijz;
+	    //poti += kappa*m_r*dr*dr * 0.5 -dr* pj[j].getCharge()*r_coll_sq_inv;
+	    poti += kappacoef*dr*r * 0.5;
+	    PS::F64vec vij = pi[i].vel - pj[j].vel;
+	    PS::F64 vijx = vix - vxj[j];
+	    PS::F64 vijy = viy - vyj[j];
+	    PS::F64 vijz = viz - vzj[j];
+	    PS::F64 rv = rijx*vijx + rijy*vijy + rijz*vijz;
+	    if(r_coll_sq < r2) rv=0.0;
+	    
+	    PS::F64 etacoef = -eta * m_r * rv * r2_inv;
 #if 0		
-		fprintf(stderr, " ri= %g %g %g vi= %g %g %g\n",
-			xix, xiy, xiz, vix, viy, viz);
-		fprintf(stderr, " dr = %g k force, pot =%g %g %g  %g\n",
-			dr, kappacoef* rijx, kappacoef* rijy,kappacoef* rijz,
-			kappa*dr*r * 0.5);
-		
-		fprintf(stderr, " eta=%g rv=%g  etacoef=%g f= %g %g %g dedt=%g\n",
-			eta, rv, etacoef,
-			etacoef * rijx, etacoef * rijy, etacoef * rijz,
-			-etacoef * rv);
+	    fprintf(stderr, " ri= %g %g %g vi= %g %g %g\n",
+		    xix, xiy, xiz, vix, viy, viz);
+	    fprintf(stderr, " dr = %g k force, pot =%g %g %g  %g\n",
+		    dr, kappacoef* rijx, kappacoef* rijy,kappacoef* rijz,
+		    kappa*dr*r * 0.5);
+	    
+	    fprintf(stderr, " eta=%g rv=%g  etacoef=%g f= %g %g %g dedt=%g\n",
+		    eta, rv, etacoef,
+		    etacoef * rijx, etacoef * rijy, etacoef * rijz,
+		    -etacoef * rv);
 #endif			
-		aix += etacoef * rijx;
-		aiy += etacoef * rijy;
-		aiz += etacoef * rijz;
-		dedtdumperi -= etacoef * rv*m_r;
-	    }
+	    aix += etacoef * rijx;
+	    aiy += etacoef * rijy;
+	    aiz += etacoef * rijz;
+	    dedtdumperi -= etacoef * rv*m_r;
 	}
 	force[i].acc += PS::F64vec(aix, aiy, aiz);
 	force[i].pot += poti;
@@ -617,86 +703,6 @@ void CalcForceEp(const FPGrav * pi,
 }
 
 
-template <class TParticleJ>
-void CalcForceEpnonworking(const FPGrav * pi,
-			   const PS::S32 ni,
-			   const TParticleJ * pj,
-			   const PS::S32 nj,
-			   FPGrav * force) {
-    PS::F64 eps2 = FPGrav::eps * FPGrav::eps;
-    PS::F64 kappa = FPGrav::kappa;
-    PS::F64 eta   = FPGrav::eta;
-    PS::F64 xj[nj];
-    PS::F64 yj[nj];
-    PS::F64 zj[nj];
-    PS::F64 vxj[nj];
-    PS::F64 vyj[nj];
-    PS::F64 vzj[nj];
-    PS::F64 mj[nj];
-    PS::S64 jid[nj];
-    for(int j=0; j<nj; j++){
-	xj[j] = pj[j].pos_car[0];
-	yj[j] = pj[j].pos_car[1];
-	zj[j] = pj[j].pos_car[2];
-	vxj[j] = pj[j].vel[0];
-	vyj[j] = pj[j].vel[1];
-	vzj[j] = pj[j].vel[2];
-	mj[j] = pj[j].getCharge();
-	jid[j] = pj[j].id;
-    }
-	
-    for(int i=0; i<ni; i++){
-	const PS::F64vec xi = pi[i].pos_car;
-	PS::F64 xix= pi[i].pos_car[0];
-	PS::F64 xiy = pi[i].pos_car[1];
-	PS::F64 xiz = pi[i].pos_car[2];
-	PS::F64vec ai = 0.0;
-	PS::F64 aix = 0.0;
-	PS::F64 aiy = 0.0;
-	PS::F64 aiz = 0.0;
-	PS::F64 poti = 0.0;
-	PS::F64 r_coll = FPGrav::rcoll;
-	PS::F64  r_coll_inv = 1.0/r_coll;
-	PS::F64 r_coll_sq = r_coll*r_coll;
-	PS::F64 r_coll_third_inv = 1.0/(r_coll_sq*r_coll);
-	PS::F64 r_coll_sq_inv = 1.0/(r_coll*r_coll);
-	PS::S64 iid = pi[i].id;
-	
-	for(int j=0; j<nj; j++){
-	    PS::F64vec rij    = xi - pj[j].pos_car;
-	    PS::F64 rijx    = xix - xj[j];
-	    PS::F64 rijy    = xiy - yj[j];
-	    PS::F64 rijz    = xiz - zj[j];
-	    if(iid == jid[j]) continue;
-	    //	    PS::F64 r2 = rij * rij + eps2;
-	    PS::F64 r2 = rijx*rijx +rijy*rijy +rijz*rijx +eps2;
-	    PS::F64 r2_inv  = 1.0/r2;
-	    PS::F64 r_inv  =  sqrt(r2_inv);
-	    PS::F64 pot = r_inv * pj[j].getCharge();
-	    if(r_coll_sq < r2){
-		ai     += -pot * r2_inv * rij;
-		poti   +=  -pot;
-	    }else{
-		ai     +=  -rij* pj[j].getCharge()*r_coll_third_inv;;
-		poti   +=  -pj[j].getCharge()*r_coll_inv;;
-		
-		PS::F64 m_r = pj[j].mass / (pi[i].mass+pj[j].mass);
-		PS::F64 r = sqrt(r2);
-		PS::F64 dr = r_coll-r ;
-		PS::F64vec a_kappa = kappa * m_r * dr/r * rij;
-		ai += a_kappa;
-		poti += kappa*m_r*dr*dr * 0.5 -dr* pj[j].getCharge()*r_coll_sq_inv;
-		PS::F64vec vij = pi[i].vel - pj[j].vel;
-		PS::F64 rv = rij*vij;
-		PS::F64vec a_eta = -eta * m_r * rv * r2_inv * rij;
-		ai += a_eta;
-	    }
-	}
-	force[i].acc += ai;
-	force[i].pot += poti;
-    }
-    
-}
 
 
 template <class TParticleJ>

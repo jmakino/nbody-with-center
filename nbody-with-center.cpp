@@ -574,7 +574,7 @@ int main(int argc, char *argv[]) {
     char in_name[1024];
     PS::S64 n_tot = 1024;
     PS::S32 c;
-    PS::S32 exchange_let_mode = 0;
+    PS::S32 exchange_let_mode = 2;
     PS::S64 nxinit = 1000;
     PS::S64 nyinit = 20;
     PS::F64 widthinit = 0.1;
