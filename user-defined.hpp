@@ -61,7 +61,8 @@ public:
 
     void dtoc()
     {
-	const auto pos_r   = sqrt(pos_car.x*pos_car.x + pos_car.y*pos_car.y);
+//	const auto pos_r   = sqrt(pos_car.x*pos_car.x + pos_car.y*pos_car.y);
+	const auto pos_r   = log(pos_car.x*pos_car.x + pos_car.y*pos_car.y)*0.5+1;
 	auto pos_phi = atan2(pos_car.y, pos_car.x);
 	if (pos_phi >= M_PI) pos_phi -= SMALL;
 	if (pos_phi <= -M_PI) pos_phi += SMALL;
@@ -431,7 +432,7 @@ void CalcGravity(const FPGrav * iptcl,
 
 
 template <class TParticleJ>
-void CalcForceEpOld(const FPGrav * pi,
+void CalcForceEpold(const FPGrav * pi,
                  const PS::S32 ni,
                  const TParticleJ * pj,
                  const PS::S32 nj,
@@ -588,7 +589,7 @@ void CalcForceEp(const FPGrav * pi,
     }
 #endif    
 
-    PS::F64 eps2 = FPGrav::eps * FPGrav::eps;
+    PS::F64 eps2 = FPGrav::eps * FPGrav::eps+1e-300;
     PS::F64 kappa = FPGrav::kappa;
     PS::F64 eta   = FPGrav::eta;
     PS::F64 xj[nj];
@@ -638,7 +639,8 @@ void CalcForceEp(const FPGrav * pi,
 	    PS::F64 rijx    = xix - xj[j];
 	    PS::F64 rijy    = xiy - yj[j];
 	    PS::F64 rijz    = xiz - zj[j];
-	    PS::F64 m_r = mj[j]/ (mi+mj[j]);
+	    PS::F64 mjlocal = mj[j];
+	    PS::F64 m_r = mjlocal/ (mi+mjlocal);
 	    PS::F64 r2 = rijx*rijx +rijy*rijy +rijz*rijz +eps2;
 	    PS::F64 r2_inv;
 	    PS::F64 r_inv;
@@ -652,10 +654,13 @@ void CalcForceEp(const FPGrav * pi,
 	    }else{
 		r_inv = r_coll_inv;
 		r2_inv = r_inv*r_inv;
-		if(iid == jid[j]) m_r=0;
+		if(iid == jid[j]) {
+		    m_r=0;
+		    mjlocal=0;
+		}
 		
 	    }
-	    PS::F64 pot = r_inv * mj[j];
+	    PS::F64 pot = r_inv * mjlocal;
 #if 0	    
 	    fprintf(stderr, "i=%d j=%d r2 =%g r_coll_sq=%g\n",
 		    i, j, r2, r_coll_sq);

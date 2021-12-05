@@ -144,10 +144,10 @@ void generate_initial_cold_disk(PS::S64 nx,
 	//	fprintf(stderr, "ix  x0, y0, theta, width, dr = %d %e %e %e %e %e\n",
 	//		ix, x0, y0, theta, width, dr);
 	for(PS::S32 iy = 0; iy < ny; iy++){
-	    PS::F64 rscale = (iy* dr) + 1.0 - width/2;
+	    PS::F64 rscale = (iy* dr) + 1.0 ;
 	    auto vscale = 1.0/sqrt(rscale);
 	    psys[i].pos_car  = PS::F64vec(x0*rscale, y0*rscale, 0.0);
-	    psys[i].vel  = PS::F64vec(-y0*vscale, x0*vscale, 0.0);
+	    psys[i].vel  = PS::F64vec(y0*vscale, -x0*vscale, 0.0);
 	    psys[i].mass  = mass;
 	    psys[i].id   = id;
 	    i++;

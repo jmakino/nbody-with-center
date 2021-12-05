@@ -19,7 +19,8 @@ MPICC =  time mpicxx
 MPICFLAGS = $(CFLAGS) -DPARTICLE_SIMULATOR_MPI_PARALLEL
 SRCS = LICENSE  Readme.md nbody-with-center.cpp user-defined.hpp\
       Makefile ringin	 ring.rb	  samplein ringin_hot \
-      Makefile.a64fx Makefile.a64fxclang Makefile.mpi
+      Makefile.a64fx Makefile.a64fxclang \
+      moontest20k.in
 EXPORTDIR = ../nbody-with-center-export
 use_phantom_grape_x86 = no
 #use_gpu_cuda = yes
