@@ -1,9 +1,10 @@
-PS_PATH =../fdps/fdps/src/
+PS_PATH =../fdps/fdps-test/src/
 
 INC = -I$(PS_PATH)
 
 #CC = time g++
 CC = time mpic++
+#CC = time /usr/lib64/mpich/bin/mpic++
 CFLAGS = -O3 --std=c++11
 #CFLAGS += -Wall
 #CFLAGS += -ffast-math
