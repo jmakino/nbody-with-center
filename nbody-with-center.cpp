@@ -710,7 +710,7 @@ int main(int argc, char *argv[]) {
     {
         char sout_remove[1024];
 #ifdef PARTICLE_SIMULATOR_MPI_PARALLEL
-	sprintf(sout_remove, "%s/remove%-4d.dat", dir_name,PS::Comm::getRank() );
+	sprintf(sout_remove, "%s/remove%04d.dat", dir_name,PS::Comm::getRank() );
 #else
 	sprintf(sout_remove, "%s/remove.dat", dir_name);
 #endif	
