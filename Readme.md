@@ -130,6 +130,8 @@ mpirun -np 16 nbody-with-center-quad-mpi -T 1000 -r 0.01 -K 128 -i moontest20k.i
 
 時刻500くらいまで回すと月っぽいものができてくる。
 
+[アニメーション(86MB)](https://github.com/jmakino/nbody-with-center/blob/master/moontest20k.gif).
+
 # 更新履歴
 
 2021/12/5
