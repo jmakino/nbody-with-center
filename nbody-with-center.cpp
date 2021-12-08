@@ -861,7 +861,8 @@ int main(int argc, char *argv[]) {
 	    
 	    if(PS::Comm::getRank() == 0){
                 fout_eng << time_sys << "   " << (Etot1 - Etot0) / Etot0 <<
-		    " " << Etot1 << " " << Ekin1 << " " << Epot1 <<std::endl;
+		    " " << Etot1 << " " << Ekin1 << " " << Epot1 <<
+			  " " << Elost1 <<std::endl;
                 fprintf(stdout, "time: %10.7f etot,k,p,l=%e %e %e %e energy error: %+e\n",
                         time_sys, Etot1, Ekin1, Epot1, Elost1,
 			(Etot1 - Etot0) / Etot0);
