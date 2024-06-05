@@ -110,7 +110,14 @@ public:
     }
 };
 
-		
+
+void countup_reuse(int & i_reuse,
+		   int n_reuse)
+{
+    i_reuse ++;
+    if (i_reuse >= n_reuse) i_reuse = 0;
+}
+
 template<class Tpsys>
 void generate_initial_cold_disk(PS::S64 nx,
 				PS::S64 ny,
@@ -375,6 +382,7 @@ void printHelp() {
     std::cerr<<"s: time_step (default: 1.0 / 512.0)"<<std::endl;
     std::cerr<<"T: time_end (default: 10.0)"<<std::endl;
     std::cerr<<"t: theta (default: 0.5)"<<std::endl;
+    std::cerr<<"u: n_reuse (default: 0)"<<std::endl;
     std::cerr<<"h: help"<<std::endl;
 }
 
@@ -580,11 +588,13 @@ int main(int argc, char *argv[]) {
     PS::F64 widthinit = 0.1;
     PS::F64 massinit = 5e-8;
     PS::F64 r_inner_cutoff = 0.0;
+    PS::S32 n_reuse = 0;
+    PS::S32 i_reuse = 0;
     //    strncpy(dir_name,"./result", 1000);
     dir_name[0]=0;
     in_name[0]=0;
     opterr = 0;
-    while((c=getopt(argc,argv,"i:r:k:e:g:p:o:d:D:t:T:l:M:n:hs:K:S:R:bE:I:")) != -1){
+    while((c=getopt(argc,argv,"i:r:k:e:g:p:o:d:D:t:T:l:M:n:hs:K:S:R:bE:I:u:")) != -1){
         switch(c){
 	    case 'i':
 		strncpy(in_name,optarg,1000);
@@ -652,6 +662,9 @@ int main(int argc, char *argv[]) {
 	    case 'I':
 		sscanf(optarg,"%lld,%lld,%lf,%lf", &nxinit, &nyinit, &widthinit, &massinit);
 		break;
+	    case 'u':
+		n_reuse = atoi(optarg);
+		break;
 	    case 'h':
 		if(PS::Comm::getRank() == 0) {
 		    printHelp();
@@ -692,6 +705,7 @@ int main(int argc, char *argv[]) {
 	std::cerr << "widthinit = " << widthinit<< std::endl;
 	std::cerr << "massinit = " << massinit<< std::endl;
 	std::cerr << "r_inner_cutoff = " << r_inner_cutoff<< std::endl;
+	std::cerr << "n_reuse = " << n_reuse<< std::endl;
     }
     makeOutputDirectory(dir_name);
 
@@ -818,11 +832,20 @@ int main(int argc, char *argv[]) {
                                                 dinfo,
                                                 n_walk_limit);
 #else
-    tree_grav.calcForceAllAndWriteBack(CalcForceEp<EPJGrav>,
-                                       CalcForceSp(),
-                                       system_grav,
-                                       dinfo);
-    //				       true, PS::MAKE_LIST_FOR_REUSE );
+    if (n_reuse==0){
+	tree_grav.calcForceAllAndWriteBack(CalcForceEp<EPJGrav>,
+					   CalcForceSp(),
+					   system_grav,
+					   dinfo);
+    }else{
+	tree_grav.calcForceAllAndWriteBack(CalcForceEp<EPJGrav>,
+					   CalcForceSp(),
+					   system_grav,
+					   dinfo,
+					   true, PS::MAKE_LIST_FOR_REUSE );
+	countup_reuse(i_reuse, n_reuse);
+	
+    }
 #endif
     add_central_gravity(system_grav);
     //    dump_system(system_grav);
@@ -897,7 +920,7 @@ int main(int argc, char *argv[]) {
 	et.measure(0,5);
         
 	et.measure(1,0);
-        if(n_loop % 4 == 0){
+        if(n_loop % 4 == 0 && i_reuse == 0){
             dinfo.decomposeDomainAll(system_grav);
         }
         
@@ -906,7 +929,9 @@ int main(int argc, char *argv[]) {
 	if (show_time_profile)   mybarrier();
 	et.measure(0,7);
 	et.measure(1,1);
-        system_grav.exchangeParticle(dinfo);
+	if (i_reuse == 0){
+	    system_grav.exchangeParticle(dinfo);
+	}
 	et.measure(0,1);
 	
 	et.measure(1,2);
@@ -919,11 +944,28 @@ int main(int argc, char *argv[]) {
                                                     n_walk_limit,
                                                     true);
 #else
-        tree_grav.calcForceAllAndWriteBack(CalcForceEp<EPJGrav>,
-                                           CalcForceSp(),
-                                           system_grav,
-                                           dinfo);
-	//		   true, PS::MAKE_LIST_FOR_REUSE );
+	if (n_reuse == 0){
+	    tree_grav.calcForceAllAndWriteBack(CalcForceEp<EPJGrav>,
+					       CalcForceSp(),
+					       system_grav,
+					       dinfo);
+	}else{
+	    if (i_reuse == 0){
+		    tree_grav.calcForceAllAndWriteBack(CalcForceEp<EPJGrav>,
+						       CalcForceSp(),
+						       system_grav,
+						       dinfo,
+						       true, PS::MAKE_LIST_FOR_REUSE );
+		}else{
+		    tree_grav.calcForceAllAndWriteBack(CalcForceEp<EPJGrav>,
+						       CalcForceSp(),
+						       system_grav,
+						       dinfo,
+						       true, PS::REUSE_LIST );
+		}
+		countup_reuse(i_reuse, n_reuse);
+	}
+	    
 	
 #endif
 	et.measure(0,2);
